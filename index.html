@@ -86,7 +86,16 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     background: #fffdf8;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
   }
+  #list li:hover { border-color: var(--amber); background: #fffaf0; }
+  #list li.sel {
+    border-color: var(--amber);
+    background: #fff6e0;
+    box-shadow: inset 0 0 0 1px var(--amber);
+  }
+  #list li:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
   #list img {
     width: 48px; height: 48px;
     object-fit: cover;
@@ -119,10 +128,20 @@
     display: grid;
     place-items: center;
   }
-  #stage img { width: 100%; height: 100%; object-fit: contain; display: none; }
+  #stage img { width: 100%; height: 100%; object-fit: contain; display: none; transition: opacity .12s; }
   #stage.has img { display: block; }
+  #stage.busy img { opacity: .35; }
   #stage .hint { color: var(--muted); font-size: 13px; text-align: center; padding: 0 24px; }
   #stage.has .hint { display: none; }
+
+  #pname {
+    margin-top: 8px;
+    min-height: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
 
   /* ---- action ---- */
   #go {
@@ -181,12 +200,13 @@
 
     <div>
       <div class="panel">
-        <h2>預覽（第一張）</h2>
+        <h2>預覽</h2>
         <div id="stage">
           <!-- 初始給 1x1 透明 GIF：空 src 在 file:// 下會讓瀏覽器嘗試載入頁面自身 -->
           <img id="preview" alt="合成預覽" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
           <div class="hint">尚未選擇照片</div>
         </div>
+        <div id="pname"></div>
         <button id="go" disabled>產出並下載</button>
         <div id="status"></div>
       </div>
@@ -198,6 +218,8 @@
     <ul>
       <li>外框的兩個橫幅會蓋住照片的<strong>左上角</strong>與<strong>右下角</strong>，商品主體請盡量置中。</li>
       <li>來源照片短邊建議 ≥ 1000px，否則會被放大而略糊。</li>
+      <li>照片若有<strong>左右</strong>或<strong>上下</strong>的純色留白邊（白／米色／淺灰），會自動去除後再放大填滿；<strong>四邊都是淺色底</strong>的棚拍照則原樣處理，不會被裁。</li>
+      <li>點左邊清單的任一張（或用 <strong>↑↓</strong> 鍵）可切換右邊的預覽。</li>
       <li>多張會打包成<strong>一個 ZIP</strong> 下載（單張則直接給 JPG）。ZIP 內不壓縮——JPEG 本來就壓過了。</li>
       <li>iPhone 的 HEIC 檔請用 <strong>Safari</strong> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
@@ -221,10 +243,23 @@
   const preview = document.getElementById('preview');
   const go      = document.getElementById('go');
   const status  = document.getElementById('status');
+  const pname   = document.getElementById('pname');
+  const hint    = stage.querySelector('.hint');
 
-  /** @type {{file: File, li: HTMLLIElement, badge: HTMLElement, thumbUrl: string}[]} */
+  /**
+   * @typedef {Object} Item
+   * @property {File} file
+   * @property {HTMLLIElement} li
+   * @property {HTMLElement} badge
+   * @property {HTMLElement} dim
+   * @property {string} thumbUrl
+   * @property {?{blob: Blob, trim: ?Object}} cache    合成結果，預覽與輸出共用
+   * @property {?string} previewUrl
+   */
+  /** @type {Item[]} */
   let items = [];
-  let previewUrl = null;
+  let selected = -1;
+  let previewToken = 0;   // 遞增序號：只有最後一次點擊的合成結果能寫進預覽
   let busy = false;
 
   // ---- 外框：以 data URI 載入，不會污染 canvas（file:// 下讀本機檔案會） ----
@@ -369,15 +404,159 @@
            '-' + p(d.getHours()) + p(d.getMinutes()) + '.zip';
   }
 
-  /** cover 置中裁切：回傳來源影像上要取用的矩形 */
-  function coverRect(w, h) {
-    const scale = Math.max(SIZE / w, SIZE / h);
-    const sw = SIZE / scale;
-    const sh = SIZE / scale;
-    return { sx: (w - sw) / 2, sy: (h - sh) / 2, sw, sh };
+  // ==========================================================================
+  // 純色留白邊偵測
+  //
+  // 賣場素材常見「內容被塞在正方形畫布中間、左右（或上下）補純色」的圖。這種
+  // 圖若直接 cover，因為原始尺寸已是正方形，等於原樣輸出，商品在框裡顯得很小。
+  //
+  // 判定刻意保守，寧可不裁也不要裁進內容：
+  //   淺色閘門    只認亮色留白 → 深色純底照（例如暗紅棚拍背景）不會被吃掉
+  //   一致性閘門  四角必須同色 → 角落落在內容上時直接放棄
+  //   單軸規則    只修柱狀／信箱式留白；四邊都有留白＝白底商品照，不動它
+  //   整列判定    整列都是背景才算留白，遇到任一內容像素就停，不用逐點 bbox
+  // ==========================================================================
+
+  const SCAN_MAX   = 512;   // 掃描縮圖的最長邊；4000px 原圖直接 getImageData 要 48MB
+  const BG_LUMA    = 215;   // 淺色閘門：米色 #fdf6e8 約 246、淺灰 #eee 約 238
+  const BG_TOL     = 12;    // 顏色容差；蓋得住 JPEG 雜訊，蓋不到真內容
+  const MARGIN_MIN = 0.03;  // 留白帶至少要佔該軸這個比例才算數
+  const SCAN_SLACK = 2;     // 邊界一律向外放寬這麼多掃描像素（縮圖平滑會糊掉邊界）
+
+  /** 把 bitmap 縮到 ≤512 邊的離屏 canvas，取一次 ImageData 供後續掃描 */
+  function scanCanvas(bmp) {
+    const k = Math.min(1, SCAN_MAX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k));
+    const h = Math.max(1, Math.round(bmp.height * k));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, w, h);
+    return { data: ctx.getImageData(0, 0, w, h).data, w, h, kx: w / bmp.width, ky: h / bmp.height };
   }
 
-  /** 單張合成：解碼 → 裁切繪製 → 疊框 → JPEG Blob */
+  /** 5×5 的逐通道中位數，避開單一雜點 */
+  function medianPatch(scan, x0, y0) {
+    const ch = [[], [], []];
+    for (let y = y0; y < y0 + 5; y++) {
+      for (let x = x0; x < x0 + 5; x++) {
+        const o = (y * scan.w + x) * 4;
+        ch[0].push(scan.data[o]);
+        ch[1].push(scan.data[o + 1]);
+        ch[2].push(scan.data[o + 2]);
+      }
+    }
+    return ch.map(v => v.sort((a, b) => a - b)[v.length >> 1]);
+  }
+
+  function sampleCorners(scan) {
+    if (scan.w < 5 || scan.h < 5) return null;
+    return [
+      medianPatch(scan, 0, 0),
+      medianPatch(scan, scan.w - 5, 0),
+      medianPatch(scan, 0, scan.h - 5),
+      medianPatch(scan, scan.w - 5, scan.h - 5),
+    ];
+  }
+
+  /** 四角取樣 → 背景色；不通過淺色／一致性閘門則回傳 null（＝不去邊） */
+  function bgColorOf(corners) {
+    if (!corners) return null;
+    for (const c of corners) {
+      if (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < BG_LUMA) return null;
+    }
+    for (let ch = 0; ch < 3; ch++) {
+      let lo = 255, hi = 0;
+      for (const c of corners) {
+        if (c[ch] < lo) lo = c[ch];
+        if (c[ch] > hi) hi = c[ch];
+      }
+      if (hi - lo > BG_TOL) return null;
+    }
+    return [0, 1, 2].map(ch => Math.round(corners.reduce((s, c) => s + c[ch], 0) / corners.length));
+  }
+
+  /** 由外往內掃出四邊留白厚度（掃描像素）；整張都是背景時回傳 null */
+  function scanMargins(scan, bg) {
+    const { data, w, h } = scan;
+    const isBg = o =>
+      data[o + 3] < 8 ||
+      (Math.abs(data[o]     - bg[0]) <= BG_TOL &&
+       Math.abs(data[o + 1] - bg[1]) <= BG_TOL &&
+       Math.abs(data[o + 2] - bg[2]) <= BG_TOL);
+    const colBg = x => { for (let y = 0; y < h; y++) if (!isBg((y * w + x) * 4)) return false; return true; };
+    const rowBg = y => { for (let x = 0; x < w; x++) if (!isBg((y * w + x) * 4)) return false; return true; };
+
+    let l = 0;
+    while (l < w && colBg(l)) l++;
+    if (l === w) return null;                       // 全白圖
+    let r = w - 1;
+    while (r > l && colBg(r)) r--;
+    let t = 0;
+    while (t < h && rowBg(t)) t++;
+    let b = h - 1;
+    while (b > t && rowBg(b)) b--;
+
+    return { l, r: w - 1 - r, t, b: h - 1 - b };
+  }
+
+  /**
+   * 內容矩形（原始像素）。不去邊時就是整張。
+   * @returns {{x:number, y:number, w:number, h:number, trim:?{axis:'x'|'y', a:number, b:number}}}
+   */
+  function contentRect(bmp) {
+    const none = { x: 0, y: 0, w: bmp.width, h: bmp.height, trim: null };
+
+    let scan;
+    try {
+      scan = scanCanvas(bmp);
+    } catch (err) {
+      return none;                                  // 取不到像素（理論上不該發生）就照原樣走
+    }
+
+    const bg = bgColorOf(sampleCorners(scan));
+    if (!bg) return none;
+    const m = scanMargins(scan, bg);
+    if (!m) return none;
+
+    const bigL = m.l / scan.w >= MARGIN_MIN;
+    const bigR = m.r / scan.w >= MARGIN_MIN;
+    const bigT = m.t / scan.h >= MARGIN_MIN;
+    const bigB = m.b / scan.h >= MARGIN_MIN;
+    const trimX = bigL && bigR && !bigT && !bigB;
+    const trimY = bigT && bigB && !bigL && !bigR;
+    if (!trimX && !trimY) return none;              // 含「四邊都有留白」＝純色底商品照
+
+    const back = (v, k) => Math.max(0, Math.round((v - SCAN_SLACK) / k));
+
+    if (trimX) {
+      const a = back(m.l, scan.kx);
+      const b = back(m.r, scan.kx);
+      const w = bmp.width - a - b;
+      if (w <= 0 || (!a && !b)) return none;
+      return { x: a, y: 0, w, h: bmp.height, trim: { axis: 'x', a, b } };
+    }
+    const a = back(m.t, scan.ky);
+    const b = back(m.b, scan.ky);
+    const h = bmp.height - a - b;
+    if (h <= 0 || (!a && !b)) return none;
+    return { x: 0, y: a, w: bmp.width, h, trim: { axis: 'y', a, b } };
+  }
+
+  /**
+   * cover 置中裁切：在內容矩形內取最大的正方形。
+   * 回傳的是原始影像座標，已把去邊與 cover 併成同一個來源矩形，
+   * 所以只需要一次 drawImage，不經中間畫布重複取樣。
+   */
+  function coverRect(rect) {
+    const scale = Math.max(SIZE / rect.w, SIZE / rect.h);
+    const sw = SIZE / scale;
+    const sh = SIZE / scale;
+    return { sx: rect.x + (rect.w - sw) / 2, sy: rect.y + (rect.h - sh) / 2, sw, sh };
+  }
+
+  /** 單張合成：解碼 → 去留白邊 → 裁切繪製 → 疊框 → JPEG Blob */
   async function compose(file) {
     const frame = await frameReady;
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -391,13 +570,14 @@
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, SIZE, SIZE);
 
-      const r = coverRect(bmp.width, bmp.height);
+      const content = contentRect(bmp);
+      const r = coverRect(content);
       ctx.drawImage(bmp, r.sx, r.sy, r.sw, r.sh, 0, 0, SIZE, SIZE);
       ctx.drawImage(frame, 0, 0, SIZE, SIZE);
 
       const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', QUALITY));
       if (!blob) throw new Error('toBlob 失敗');
-      return { blob, w: bmp.width, h: bmp.height };
+      return { blob, w: bmp.width, h: bmp.height, trim: content.trim };
     } finally {
       bmp.close();
     }
@@ -421,9 +601,17 @@
   }
 
   function clearItems() {
-    for (const it of items) URL.revokeObjectURL(it.thumbUrl);
+    for (const it of items) {
+      URL.revokeObjectURL(it.thumbUrl);
+      if (it.previewUrl) URL.revokeObjectURL(it.previewUrl);
+    }
     items = [];
+    selected = -1;
+    previewToken++;                       // 讓還在飛的合成結果失效
     list.innerHTML = '';
+    stage.classList.remove('has', 'busy');
+    hint.textContent = '尚未選擇照片';
+    pname.textContent = '';
   }
 
   function render(files) {
@@ -451,9 +639,25 @@
       badge.textContent = '待處理';
 
       li.append(img, meta, badge);
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      const index = items.length;
+      li.addEventListener('click', () => select(index));
+      li.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(index); }
+      });
+
       list.appendChild(li);
-      items.push({ file, li, badge, thumbUrl });
+      items.push({ file, li, badge, dim, thumbUrl, cache: null, previewUrl: null });
     }
+  }
+
+  /** 把去邊結果寫回清單那一列，讓誤判用掃的就看得出來 */
+  function markTrim(item, trim) {
+    const kb = (item.file.size / 1024).toFixed(0) + ' KB';
+    item.dim.textContent = trim
+      ? kb + ' · 已去' + (trim.axis === 'x' ? '左右' : '上下') + '白邊'
+      : kb;
   }
 
   function mark(item, text, cls) {
@@ -461,17 +665,45 @@
     item.badge.className = 'badge' + (cls ? ' ' + cls : '');
   }
 
-  async function refreshPreview() {
-    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
-    stage.classList.remove('has');
-    if (!items.length) return;
+  function showPreview(item) {
+    preview.src = item.previewUrl;
+    stage.classList.add('has');
+    pname.textContent = item.file.name;
+  }
+
+  /**
+   * 切換預覽對象。合成是非同步的（大圖 100~500ms），連點多張時回應順序不保證，
+   * 所以用 previewToken 把過期的結果丟掉，避免「點 C 卻顯示 B」。
+   */
+  async function select(i) {
+    if (i < 0 || i >= items.length) return;
+    const item = items[i];
+
+    if (selected >= 0 && items[selected]) items[selected].li.classList.remove('sel');
+    selected = i;
+    item.li.classList.add('sel');
+
+    const token = ++previewToken;
+
+    if (item.previewUrl) { stage.classList.remove('busy'); showPreview(item); return; }
+
+    pname.textContent = item.file.name;
+    if (stage.classList.contains('has')) stage.classList.add('busy');
+
     try {
-      const { blob } = await compose(items[0].file);
-      previewUrl = URL.createObjectURL(blob);
-      preview.src = previewUrl;
-      stage.classList.add('has');
+      const { blob, trim } = await compose(item.file);
+      if (token !== previewToken) return;          // 已被更晚的點擊取代
+      item.cache = { blob, trim };
+      item.previewUrl = URL.createObjectURL(blob);
+      markTrim(item, trim);
+      stage.classList.remove('busy');
+      showPreview(item);
     } catch (err) {
-      setStatus('第一張無法預覽：' + reason(err, items[0].file), 'err');
+      if (token !== previewToken) return;
+      mark(item, reason(err, item.file), 'bad');
+      stage.classList.remove('has', 'busy');
+      hint.textContent = item.file.name + '：' + reason(err, item.file);
+      pname.textContent = '';
     }
   }
 
@@ -494,12 +726,22 @@
     go.textContent = files.length === 1 ? '產出並下載 1 張'
                                         : '打包下載 ' + files.length + ' 張（ZIP）';
     setStatus('');
-    await refreshPreview();
+    await select(0);
   }
 
   // ---- 事件 ----
   drop.addEventListener('click', () => picker.click());
   picker.addEventListener('change', () => accept(picker.files));
+
+  // ↑↓ 掃過整批圖比逐張點快
+  list.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const next = selected + (e.key === 'ArrowDown' ? 1 : -1);
+    if (next < 0 || next >= items.length) return;
+    e.preventDefault();
+    items[next].li.focus();
+    select(next);
+  });
 
   ['dragenter', 'dragover'].forEach(ev =>
     drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hot'); }));
@@ -524,7 +766,10 @@
       setStatus('合成中 ' + (i + 1) + ' / ' + items.length + '…');
       mark(item, '合成中');
       try {
-        const { blob } = await compose(item.file);
+        // 預覽過的那幾張直接用快取，不重算
+        const { blob, trim } = item.cache || await compose(item.file);
+        item.cache = { blob, trim };
+        markTrim(item, trim);
         const bytes = new Uint8Array(await blob.arrayBuffer());
         entries.push({ name: dedupe(outputName(item.file), used), bytes, blob });
         mark(item, '已合成', 'ok');
