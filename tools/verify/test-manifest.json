@@ -1,0 +1,141 @@
+{
+  "_readme": [
+    "test/ 的素材是商品照，不進版控。這份清單讓另一台電腦能確認素材傳完整、且是同一批。",
+    "用法：node tools/verify/check-test-set.js",
+    "素材本身請用 AirDrop / USB 等離線方式搬，不要放雲端硬碟或任何會上傳的地方。"
+  ],
+  "files": {
+    "test/10002_0.jpg": {
+      "bytes": 290700,
+      "sha256": "19ced6ede7c3d8fe07c95382af609da48f5b168e852b30e763591459439cd33b"
+    },
+    "test/10003_0.jpg": {
+      "bytes": 220491,
+      "sha256": "8e4b3393bc3b862931f9f032584eac790dd28ea58789e986116364487d7a5341"
+    },
+    "test/10004_0.jpg": {
+      "bytes": 265015,
+      "sha256": "f237d86db826e8855518bdf54d49eb3a372cfc28809ebdb0497f48aec7dc3a12"
+    },
+    "test/10005_0.jpg": {
+      "bytes": 290200,
+      "sha256": "f39ad1061b3099677e629538f5fde180747ff95a65f278aace7966b41d48e78c"
+    },
+    "test/10006_0.jpg": {
+      "bytes": 265226,
+      "sha256": "cfb3686f71ab6ec576262174b46d6c10d1d8eec7f386aadd85b8a176d10e0975"
+    },
+    "test/FIGURE-013460_01.jpg": {
+      "bytes": 52874,
+      "sha256": "b91c743dff2f2849839f1ff04689de261c9052bdb559b610bc6412090160e219"
+    },
+    "test/FIGURE-013460_03.jpg": {
+      "bytes": 55268,
+      "sha256": "ea3c2d496a69b3b8719203bf92cf5c5d3029bae398962ba19a2002dc3a36f58e"
+    },
+    "test/FIGURE-013460_07.jpg": {
+      "bytes": 48965,
+      "sha256": "4ba0e4a010fa1b8adc89ca7f1798e25732f02fbb5f26790265b68821e9a4c7f0"
+    },
+    "test/FIGURE-013460_15.jpg": {
+      "bytes": 44434,
+      "sha256": "43b81b5eb1ad5c51e24be8f9f575429e59e26c31a94da91f39b2104ba2556128"
+    },
+    "test/FIGURE-013460_21.jpg": {
+      "bytes": 37209,
+      "sha256": "313bcb6fe06e199695628ba12207652f5931a68656c1b051e7194a6a0c9e173d"
+    },
+    "test/FIGURE-017925_01.jpg": {
+      "bytes": 63829,
+      "sha256": "60d5fb0db1359b7e26018f4d74c6130c9ac51e2b3841d86fd33f5768f9072196"
+    },
+    "test/FIGURE-017925_06.jpg": {
+      "bytes": 60817,
+      "sha256": "46d156ee38c49984c8071622b787cdd68bca518f0435c1b6431de2649ad89417"
+    },
+    "test/FIGURE-017925_07.jpg": {
+      "bytes": 54468,
+      "sha256": "0e8bcf33b86487a00e9ce1b991ee72e8e1e728b38623ff3797ca9a91e2cc6baf"
+    },
+    "test/FIGURE-017925_11.jpg": {
+      "bytes": 60429,
+      "sha256": "34fbea1425c626a618e5067ea2a5fb88c8e0ed8d48eb66a8312c92352b6ec595"
+    },
+    "test/FIGURE-019307_01.jpg": {
+      "bytes": 63336,
+      "sha256": "acf701dca6bdcee5a2cdeece59ac373bd14de6911a95d7597bffa9aae680e8dc"
+    },
+    "test/FIGURE-019307_04.jpg": {
+      "bytes": 60877,
+      "sha256": "caaf26c5cfead70db37a958f25c4e20993d9d53b428aa57c7e3a2b40c5ceba8b"
+    },
+    "test/FIGURE-019307_06.jpg": {
+      "bytes": 146658,
+      "sha256": "a90409d7f4d90c7e4fe833cae21ef03f980d4288eefc3f03a658f46a52ca4ea2"
+    },
+    "test/FIGURE-177657_02.jpg": {
+      "bytes": 107968,
+      "sha256": "40a7abd47a8448b682e83f76b86c9d0199a4ff5bd0a8b32a5b74501890bf7165"
+    },
+    "test/FIGURE-177657_04.jpg": {
+      "bytes": 91219,
+      "sha256": "d00229d0d542e2ad4d71f37b2f4a1a75e27ed3bd96f67125294a301acfc404a5"
+    },
+    "test/FIGURE-206172_01.jpg": {
+      "bytes": 39128,
+      "sha256": "650a0b5e9f2f97d3e9500ff43dcfa655857743504fd87b2d363479bd19adf0ee"
+    },
+    "test/FIGURE-206172_04.jpg": {
+      "bytes": 56979,
+      "sha256": "9be880245cec633afb62351ed23231abf51343d15d66a05f03269a9658417a9b"
+    },
+    "test/FIGURE-206172_08.jpg": {
+      "bytes": 102684,
+      "sha256": "ea005acfbdcea1dbd2638c7fe5a148743477f45ea3704b86f293024b55c662f4"
+    },
+    "test/FIGURE-206175_01.jpg": {
+      "bytes": 64761,
+      "sha256": "ba05f790c2df22060ca86fd774b1307d24d9a298282cb3b2984bcf3f5bf3a778"
+    },
+    "test/FIGURE-206175_13.jpg": {
+      "bytes": 73411,
+      "sha256": "1a39c8b285f28715812246984775e0aa95b5403d37b58f24690b94747bdf700b"
+    },
+    "test/LTD-FIG-11554_02.jpg": {
+      "bytes": 82393,
+      "sha256": "c2beda6381895c8462f4d5fd7d3ccf1f5c3548f0c195f733427aba94961bb34c"
+    },
+    "test/LTD-FIG-11554_04.jpg": {
+      "bytes": 74009,
+      "sha256": "868f78c60918cb3f5c2bd4d0212129c547a404ffc419e4a506102c2ed8d667d0"
+    },
+    "test/LTD-FIG-11554_06.jpg": {
+      "bytes": 88812,
+      "sha256": "2d58767b7079c1238ef231690f4c550f856e9618ac686cae9ce1a38242bf3743"
+    },
+    "test/LTD-FIG-11554_10.jpg": {
+      "bytes": 70919,
+      "sha256": "504f349270367f1b0cb4fd1928d6d1547c4f83eb3fe09ee0721fde37e17d9c92"
+    },
+    "test/LTD-FIG-11554_21.jpg": {
+      "bytes": 68225,
+      "sha256": "8bd16ff577aea34174f473967c7880f369449d26de8483eea8f9bfb1e7bec583"
+    },
+    "test/LTD-FIG-11554_24.jpg": {
+      "bytes": 73177,
+      "sha256": "7235adb7f4a3e566e6696a8fde7651d6a2de21e1ef856d9e3a8a3e9d3a03a441"
+    },
+    "test/LTD-FIG-11554_26.jpg": {
+      "bytes": 87032,
+      "sha256": "2eb9ca9489ff726afb28d381f80add0baaad819dbe43b7fbd3686675c60c7b1d"
+    },
+    "test/reference/ref-A.jpg": {
+      "bytes": 209413,
+      "sha256": "b9db62f15f5f9f291fa764308b5759d31b9cd49534bbc2569dff25f641722017"
+    },
+    "test/reference/ref-B.jpg": {
+      "bytes": 204368,
+      "sha256": "bf26a101eef60275217f5cf3d43c03fba249a1609bed73bbea12d185c02b8818"
+    }
+  }
+}

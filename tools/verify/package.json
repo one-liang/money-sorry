@@ -1,0 +1,11 @@
+{
+  "name": "money-sorry-verify",
+  "private": true,
+  "description": "censor.html 的回歸驗證工具（僅開發時使用，不影響工具本身的零依賴）",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0"
+  }
+}
