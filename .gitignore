@@ -3,3 +3,18 @@
 
 # Claude Code 本機設定（含機器專屬的權限授權，不進版控）
 .claude/settings.local.json
+
+# 偵測用測試素材（商品照，不進版控）
+test/
+
+# censor.html 是建置產物（約 18MB），每次改模板都會整個重寫，進版控會讓歷史暴增。
+# 需要時用 `node build-censor.js` 重建——模型權重在 assets/model/ 裡，重建不需要網路。
+censor.html
+
+# 驗證工具產生的疊圖（來自商品照）
+tools/verify/out/
+
+# 驗證工具的 npm 相依與 Playwright 產出（僅開發時需要，各機器自行 npm i）
+tools/verify/node_modules/
+tools/verify/test-results/
+tools/verify/playwright-report/
