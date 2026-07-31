@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>錢錢抱歉 · 裸露遮罩</title>
+<style>
+  :root {
+    --brown:  #6b3906;
+    --brown2: #8a4c0c;
+    --amber:  #f8b72a;
+    --amber2: #ffd166;
+    --cream:  #fdf6e8;
+    --ink:    #3d2205;
+    --muted:  #9a7f5c;
+    --line:   #e6d7bd;
+    --ok:     #2f7d4f;
+    --bad:    #b3402c;
+    --warn:   #a9701b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--cream);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { margin-bottom: 28px; }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: .02em;
+    color: var(--brown);
+  }
+  h1 span { color: var(--amber); }
+  .sub { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .panel + .panel { margin-top: 18px; }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  /* ---- 需要 server 的告示 ---- */
+  #protocol-gate {
+    display: none;
+    margin-bottom: 22px;
+    padding: 18px 20px;
+    border: 1px solid #e8c9b8;
+    border-left: 3px solid var(--bad);
+    border-radius: 0 12px 12px 0;
+    background: #fff6f2;
+  }
+  #protocol-gate.show { display: block; }
+  #protocol-gate strong { color: var(--bad); display: block; margin-bottom: 6px; font-size: 15px; }
+  #protocol-gate p { margin: 6px 0; font-size: 13.5px; color: #7a4a38; }
+  #protocol-gate code {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--brown);
+  }
+
+  /* ---- 模型載入狀態 ---- */
+  #model-bar {
+    margin-bottom: 18px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #model-bar .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--amber); flex: none;
+  }
+  #model-bar.ready .dot { background: var(--ok); }
+  #model-bar.fail  .dot { background: var(--bad); }
+  #model-bar.fail  { color: var(--bad); }
+
+  /* ---- drop zone ---- */
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    padding: 34px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: #fffdf8;
+  }
+  #drop:hover, #drop.hot { border-color: var(--amber); background: #fffaf0; }
+  #drop strong { display: block; font-size: 16px; color: var(--brown); margin-bottom: 4px; }
+  #drop small { color: var(--muted); }
+  #picker { display: none; }
+
+  /* ---- file list ---- */
+  #list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+  #list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffdf8;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  #list li:hover { border-color: var(--amber); background: #fffaf0; }
+  #list li.sel {
+    border-color: var(--amber);
+    background: #fff6e0;
+    box-shadow: inset 0 0 0 1px var(--amber);
+  }
+  #list li:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+  #list img {
+    width: 48px; height: 48px;
+    object-fit: cover;
+    border-radius: 7px;
+    background: var(--line);
+    flex: none;
+  }
+  #list .meta { min-width: 0; flex: 1; }
+  #list .name {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 13.5px;
+  }
+  #list .dim { color: var(--muted); font-size: 12px; }
+  #list .badges { flex: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  #list .badge {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    background: #f2ead9; color: var(--muted); white-space: nowrap;
+  }
+  #list .badge.ok   { background: #e4f2e9; color: var(--ok); }
+  #list .badge.bad  { background: #f8e5e1; color: var(--bad); }
+  #list .badge.warn { background: #fdf0da; color: var(--warn); }
+
+  /* ---- preview ---- */
+  #stage {
+    position: relative;
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-conic-gradient(#f4ecdd 0 25%, #fffdf8 0 50%) 50% / 22px 22px;
+    display: grid;
+    place-items: center;
+    min-height: 300px;
+  }
+  #canvas { max-width: 100%; display: none; touch-action: none; cursor: crosshair; }
+  #stage.has #canvas { display: block; }
+  #stage .hint { color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
+  #stage.has .hint { display: none; }
+  #stage.busy { opacity: .5; }
+
+  #pname {
+    margin-top: 8px;
+    min-height: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #detail {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 17px;
+  }
+  #detail .w { color: var(--warn); font-weight: 600; }
+
+  .editnote {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: #fffaf0;
+    border: 1px solid var(--line);
+    font-size: 12px;
+    color: #6b5433;
+    line-height: 1.7;
+  }
+  .editnote b { color: var(--brown); font-weight: 600; }
+
+  /* ---- action ---- */
+  #go {
+    margin-top: 16px;
+    width: 100%;
+    padding: 14px 18px;
+    font: 600 15.5px/1 inherit;
+    color: var(--brown);
+    background: var(--amber);
+    border: none;
+    border-bottom: 3px solid #d9970f;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: filter .12s, transform .06s;
+  }
+  #go:hover:not(:disabled) { filter: brightness(1.05); }
+  #go:active:not(:disabled) { transform: translateY(1px); border-bottom-width: 2px; }
+  #go:disabled { background: #ece2cf; color: #b6a389; border-bottom-color: #ddd0b8; cursor: not-allowed; }
+
+  #status {
+    margin-top: 10px;
+    min-height: 20px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+  #status.done { color: var(--ok); font-weight: 600; }
+  #status.err  { color: var(--bad); }
+
+  .notes { margin: 22px 0 0; padding: 14px 18px; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes li { font-size: 13px; color: #6b5433; margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>錢錢抱歉 <span>·</span> 裸露遮罩</h1>
+    <p class="sub">自動偵測公仔照的胸部、私處與臀部並疊上黑色方塊，可手動增減。全程在本機處理，照片不會離開這台電腦。</p>
+  </header>
+
+  <div id="protocol-gate">
+    <strong>這個頁面沒辦法用雙擊開啟</strong>
+    <p>偵測模型有 12MB，瀏覽器在 <code>file://</code> 下會把每個本機檔案當成獨立來源，擋掉模型載入。請改用本機 server：</p>
+    <p>在專案資料夾執行 <code>serve.cmd</code>，或手動跑 <code>npx serve .</code>，然後開 <code>http://localhost:3000/censor.html</code>。</p>
+    <p style="color:var(--muted)">套框工具 <code>index.html</code> 不受影響，仍然可以直接雙擊使用。</p>
+  </div>
+
+  <div id="model-bar"><span class="dot"></span><span id="model-msg">正在載入偵測模型…</span></div>
+
+  <div class="grid">
+
+    <div>
+      <div class="panel">
+        <h2>選擇照片</h2>
+        <div id="drop">
+          <strong>點此選擇照片，或直接拖進來</strong>
+          <small>可一次選多張 · 支援 JPG / PNG / WebP</small>
+        </div>
+        <input id="picker" type="file" accept="image/*" multiple>
+        <ul id="list"></ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>預覽與調整</h2>
+        <div id="stage">
+          <canvas id="canvas"></canvas>
+          <div class="hint">選擇照片後，這裡會顯示遮罩結果</div>
+        </div>
+        <div id="pname"></div>
+        <div id="detail"></div>
+
+        <div class="editnote">
+          <b>在圖上拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · 選取後按 <b>Delete</b> 刪除<br>
+          虛線框是<b>推算</b>的遮罩（模型沒偵測到下體時自動補上），位置不對就刪掉
+        </div>
+
+        <button id="go" disabled>選擇照片</button>
+        <div id="status"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li>遮罩要在<b>套框之前</b>做。輸出維持原尺寸，之後再丟進 <code>index.html</code> 套框。</li>
+      <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
+      <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
+      <li>沒偵測到任何部位的照片會標成「未偵測」——可能是真的不用遮，也可能是漏了，一律請人工看過。</li>
+    </ul>
+  </div>
+
+</div>
+
+<script src="./vendor/ort.wasm.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const picker   = document.getElementById('picker');
+  const drop     = document.getElementById('drop');
+  const list     = document.getElementById('list');
+  const stage    = document.getElementById('stage');
+  const canvas   = document.getElementById('canvas');
+  const go       = document.getElementById('go');
+  const statusEl = document.getElementById('status');
+  const pname    = document.getElementById('pname');
+  const detail   = document.getElementById('detail');
+  const gate     = document.getElementById('protocol-gate');
+  const modelBar = document.getElementById('model-bar');
+  const modelMsg = document.getElementById('model-msg');
+  const ctx      = canvas.getContext('2d');
+
+  // ==========================================================================
+  // 參數
+  //
+  // 閾值 0.15 是掃過 0.10~0.35 之後定的（見 openspec design.md D8）：
+  //   0.20 會丟掉 2 個私處框與 1 個臀部框，正好是最弱、漏遮成本最高的兩類
+  //   0.10 相對 0.15 只多出胸部框，對私處與臀部完全沒有改善
+  // 解碼與 NMS 兩處必須同值——nudenet 套件本身在這兩處用了不同的數字（0.2 / 0.25），
+  // 實際生效的是比較嚴格的那個，這裡不重蹈覆轍。
+  // ==========================================================================
+
+  const SCORE_THRESHOLD = 0.15;
+  const NMS_IOU         = 0.45;   // 同部位的框重疊超過這個比例就只留最高分的
+  const BOX_PAD         = 0.13;   // 框向外膨脹的比例；唯一允許放大框的地方
+  const RESOLUTIONS     = [320, 640];
+  const AREA_WARN       = 0.35;   // 遮罩面積佔比超過這個就警告「遮完可能不能用」
+  const BOX_MAX_AREA    = 0.55;   // 單一框大於這個比例視為可疑
+  const SUFFIX          = '-censored.jpg';
+  const QUALITY         = 0.92;
+
+  // 18 類的順序必須與模型輸出的通道順序一致，錯位會讓類別全部對不上
+  const LABELS = [
+    'FEMALE_GENITALIA_COVERED', 'FACE_FEMALE', 'BUTTOCKS_EXPOSED',
+    'FEMALE_BREAST_EXPOSED', 'FEMALE_GENITALIA_EXPOSED', 'MALE_BREAST_EXPOSED',
+    'ANUS_EXPOSED', 'FEET_EXPOSED', 'BELLY_COVERED', 'FEET_COVERED',
+    'ARMPITS_COVERED', 'ARMPITS_EXPOSED', 'FACE_MALE', 'BELLY_EXPOSED',
+    'MALE_GENITALIA_EXPOSED', 'ANUS_COVERED', 'FEMALE_BREAST_COVERED',
+    'BUTTOCKS_COVERED',
+  ];
+
+  // 要遮的類別。EXPOSED 與 COVERED 同等對待——需求涵蓋真露點、光暈遮蔽、貼紙、
+  // 比基尼四種狀態，它們的共同點不是「裸露」而是「解剖位置」。
+  const TARGET = new Set([
+    'FEMALE_BREAST_EXPOSED', 'FEMALE_BREAST_COVERED',
+    'FEMALE_GENITALIA_EXPOSED', 'FEMALE_GENITALIA_COVERED',
+    'BUTTOCKS_EXPOSED', 'BUTTOCKS_COVERED',
+    'ANUS_EXPOSED', 'ANUS_COVERED',
+    'MALE_GENITALIA_EXPOSED',
+  ]);
+
+  /** EXPOSED / COVERED 收斂成同一個部位鍵，避免同一處疊兩個框 */
+  function partOf(cls) {
+    if (cls.includes('BREAST'))    return 'BREAST';
+    if (cls.includes('GENITALIA')) return 'GENITALIA';
+    if (cls.includes('BUTTOCKS'))  return 'BUTTOCKS';
+    if (cls.includes('ANUS'))      return 'ANUS';
+    return 'OTHER';
+  }
+
+  // ==========================================================================
+  // 狀態
+  // ==========================================================================
+
+  /** @type {{file:File, name:string, url:string, w:number, h:number,
+   *          boxes:Array, status:string, error:string, areaPct:number}[]} */
+  let items = [];
+  let selected = -1;
+  let session = null;
+  let modelReady = false;
+  let busy = false;
+  let previewToken = 0;
+
+  // ==========================================================================
+  // 模型
+  // ==========================================================================
+
+  async function initModel() {
+    if (location.protocol === 'file:') {
+      gate.classList.add('show');
+      modelBar.classList.add('fail');
+      modelMsg.textContent = '未載入：此頁需要以本機 server 開啟';
+      return;
+    }
+    try {
+      // 沒有 COOP/COEP 標頭就沒有 SharedArrayBuffer，多執行緒會直接失敗。
+      // npx serve 不會設那組標頭，所以固定單執行緒。
+      ort.env.wasm.numThreads = 1;
+      // 必須給絕對 URL：ORT 是相對於自己那支 script 的位置去解析 wasmPaths 的，
+      // 給 './vendor/' 會變成 /vendor/vendor/
+      ort.env.wasm.wasmPaths = new URL('./vendor/', location.href).href;
+      ort.env.logLevel = 'error';
+
+      session = await ort.InferenceSession.create('./models/320n.onnx', {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      });
+      modelReady = true;
+      modelBar.classList.add('ready');
+      modelMsg.textContent = '偵測模型已就緒（NudeNet 320n · 閾值 ' + SCORE_THRESHOLD + '）';
+      if (items.length) runAll();
+    } catch (err) {
+      modelBar.classList.add('fail');
+      // 模型載入失敗絕對不能表現成「偵測到 0 個部位」——那會讓人以為圖片是安全的
+      modelMsg.textContent = '模型載入失敗：' + (err && err.message ? err.message : err) +
+                             '　（請確認 models/320n.onnx 與 vendor/ 都存在）';
+      console.error(err);
+    }
+  }
+
+  // ==========================================================================
+  // 前處理
+  //
+  // 必須完全比照 nudenet 的做法，否則座標會對不上：
+  //   1. 先把圖補成正方形（只補右邊與下邊，補黑色）
+  //   2. 再縮到模型輸入尺寸
+  //   3. RGB、NCHW、除以 255
+  // 補邊只補右下，所以原點不動，座標還原時只要乘一個比例就好。
+  // ==========================================================================
+
+  const padCanvas  = document.createElement('canvas');
+  const padCtx     = padCanvas.getContext('2d', { willReadFrequently: true });
+
+  function preprocess(bmp, res) {
+    const maxSize = Math.max(bmp.width, bmp.height);
+    padCanvas.width = res;
+    padCanvas.height = res;
+    padCtx.fillStyle = '#000';
+    padCtx.fillRect(0, 0, res, res);
+    // 一次到位：把原圖畫進 (0,0) 到 (w*res/maxSize, h*res/maxSize)，
+    // 等同於「補成正方形再縮放」，但少一個中間畫布
+    const k = res / maxSize;
+    padCtx.drawImage(bmp, 0, 0, bmp.width * k, bmp.height * k);
+
+    const { data } = padCtx.getImageData(0, 0, res, res);
+    const n = res * res;
+    const f = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) {
+      f[i]         = data[i * 4]     / 255;  // R
+      f[i + n]     = data[i * 4 + 1] / 255;  // G
+      f[i + n * 2] = data[i * 4 + 2] / 255;  // B
+    }
+    return { tensor: new ort.Tensor('float32', f, [1, 3, res, res]), maxSize };
+  }
+
+  // ==========================================================================
+  // 推論與後處理
+  // ==========================================================================
+
+  function iou(a, b) {
+    const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h);
+    if (x2 <= x1 || y2 <= y1) return 0;
+    const inter = (x2 - x1) * (y2 - y1);
+    return inter / (a.w * a.h + b.w * b.h - inter);
+  }
+
+  async function detectOnce(bmp, res) {
+    const { tensor, maxSize } = preprocess(bmp, res);
+    const out = await session.run({ images: tensor });
+    const o = out[session.outputNames[0]];
+    const [, ch, num] = o.dims;          // [1, 22, N]：前 4 是框，後 18 是各類分數
+    const d = o.data;
+    const scale = maxSize / res;         // 補邊只補右下，所以還原只需這一個比例
+    const found = [];
+
+    for (let i = 0; i < num; i++) {
+      let best = 0, bestId = -1;
+      for (let c = 4; c < ch; c++) {
+        const s = d[c * num + i];
+        if (s > best) { best = s; bestId = c - 4; }
+      }
+      if (best < SCORE_THRESHOLD) continue;
+      const cls = LABELS[bestId];
+      if (!TARGET.has(cls)) continue;
+
+      const cx = d[i], cy = d[num + i], bw = d[2 * num + i], bh = d[3 * num + i];
+      let x = (cx - bw / 2) * scale;
+      let y = (cy - bh / 2) * scale;
+      let w = bw * scale;
+      let h = bh * scale;
+
+      x = Math.max(0, Math.min(x, bmp.width));
+      y = Math.max(0, Math.min(y, bmp.height));
+      w = Math.min(w, bmp.width - x);
+      h = Math.min(h, bmp.height - y);
+      if (w <= 1 || h <= 1) continue;
+
+      found.push({ x, y, w, h, cls, score: best, part: partOf(cls) });
+    }
+    return found;
+  }
+
+  /**
+   * 跨解析度合併。用 NMS 保留最高分的框，**不能**取重疊框的外接矩形——
+   * 那樣框會在多輪合併中越滾越大，實測會產生橫跨整張畫面的黑條。
+   */
+  function mergeBoxes(all) {
+    const keep = [];
+    for (const d of all.sort((a, b) => b.score - a.score)) {
+      let dup = false;
+      for (const k of keep) {
+        // 只有同部位才互相抑制；胸與胯本來就可能重疊，不能彼此蓋掉
+        if (k.part === d.part && iou(d, k) > NMS_IOU) { dup = true; break; }
+      }
+      if (!dup) keep.push(d);
+    }
+    return keep;
+  }
+
+  /**
+   * 幾何補框。
+   *
+   * 這不是精度優化，是補模型的能力缺口：實測最常見的漏遮是「胸部有遮、下體沒遮」，
+   * 而且降閾值救不回來——那些位置連 0.1 分的候選框都不存在。既然兩個胸部框已經
+   * 定出了人物的位置與尺度，就用幾何把胯部推出來。
+   *
+   * 代價是會多出一些非必要的遮罩（實測約 13 張觸發、真正需要的只有 4~5 張），
+   * 所以補出來的框一定要標成 inferred，讓人一眼認出並刪掉。
+   */
+  function inferCrotch(boxes, imgW, imgH) {
+    const breasts = boxes.filter(b => b.part === 'BREAST');
+    const hasCrotch = boxes.some(b => b.part === 'GENITALIA');
+    if (breasts.length !== 2 || hasCrotch) return null;
+
+    const [a, b] = breasts;
+    const cxA = a.x + a.w / 2, cyA = a.y + a.h / 2;
+    const cxB = b.x + b.w / 2, cyB = b.y + b.h / 2;
+    const midX = (cxA + cxB) / 2;
+    const midY = (cyA + cyB) / 2;
+
+    // 兩乳中心距約等於胸寬，人體上「胸線 → 胯部」大約是這個距離的 1.6~1.8 倍。
+    // 取偏大的值並把框放寬，方向一律偏保守（寧可多遮）。
+    const span = Math.hypot(cxA - cxB, cyA - cyB);
+    const chest = Math.max(span, (a.w + b.w) / 2);
+    const down = chest * 1.7;
+
+    const w = chest * 0.95;
+    const h = chest * 0.95;
+    const x = midX - w / 2;
+    const y = midY + down - h / 2;
+
+    // 推出畫面外就放棄——多半代表姿勢不是站姿或正面
+    if (y > imgH || y + h < 0) return null;
+
+    const cx = Math.max(0, Math.min(x, imgW - 1));
+    const cy = Math.max(0, Math.min(y, imgH - 1));
+    return {
+      x: cx, y: cy,
+      w: Math.min(w, imgW - cx),
+      h: Math.min(h, imgH - cy),
+      cls: 'FEMALE_GENITALIA_INFERRED',
+      score: 0,
+      part: 'GENITALIA',
+      inferred: true,
+    };
+  }
+
+  /** 框向外膨脹，並夾在畫面內 */
+  function padBox(b, imgW, imgH) {
+    const px = b.w * BOX_PAD, py = b.h * BOX_PAD;
+    const x1 = Math.max(0, b.x - px), y1 = Math.max(0, b.y - py);
+    const x2 = Math.min(imgW, b.x + b.w + px), y2 = Math.min(imgH, b.y + b.h + py);
+    return { ...b, x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
+
+  async function detect(bmp) {
+    const all = [];
+    for (const res of RESOLUTIONS) {
+      const r = await detectOnce(bmp, res);
+      all.push(...r);
+    }
+    let boxes = mergeBoxes(all).map(b => padBox(b, bmp.width, bmp.height));
+
+    const inferred = inferCrotch(boxes, bmp.width, bmp.height);
+    if (inferred) boxes.push(inferred);
+
+    for (const b of boxes) {
+      b.suspect = (b.w * b.h) / (bmp.width * bmp.height) > BOX_MAX_AREA;
+    }
+    return boxes;
+  }
+
+  // ==========================================================================
+  // 遮罩面積：框會重疊，直接相加會高估。用低解析度的網格點去算聯集。
+  // ==========================================================================
+
+  function maskedRatio(boxes, w, h) {
+    if (!boxes.length) return 0;
+    const N = 160;
+    const gw = w / N, gh = h / N;
+    let hit = 0;
+    for (let gy = 0; gy < N; gy++) {
+      const py = (gy + 0.5) * gh;
+      for (let gx = 0; gx < N; gx++) {
+        const px = (gx + 0.5) * gw;
+        for (const b of boxes) {
+          if (px >= b.x && px < b.x + b.w && py >= b.y && py < b.y + b.h) { hit++; break; }
+        }
+      }
+    }
+    return hit / (N * N);
+  }
+
+  // ==========================================================================
+  // 圖片載入
+  // ==========================================================================
+
+  async function loadBitmap(file) {
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (err) {
+      if (/heic|heif/i.test(file.type) || /\.heic$/i.test(file.name)) {
+        throw new Error('此瀏覽器無法解碼 HEIC，請改用 Safari');
+      }
+      throw new Error('無法解碼這個檔案');
+    }
+  }
+
+  // ==========================================================================
+  // 批次偵測
+  // ==========================================================================
+
+  async function runAll() {
+    if (!modelReady || busy) return;
+    busy = true;
+    go.disabled = true;
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.status !== 'pending') continue;
+      setStatus(`偵測中 ${i + 1} / ${items.length}…`);
+      let bmp = null;
+      try {
+        bmp = await loadBitmap(it.file);
+        it.w = bmp.width;
+        it.h = bmp.height;
+        it.boxes = await detect(bmp);
+        it.areaPct = maskedRatio(it.boxes, it.w, it.h);
+        it.status = 'done';
+      } catch (err) {
+        it.status = 'error';
+        it.error = err.message || String(err);
+      } finally {
+        // 逐張釋放，否則一次選 30 張高解析度照片會把分頁記憶體吃光
+        if (bmp) bmp.close();
+      }
+      render();
+      if (i === selected) await drawPreview();
+    }
+
+    busy = false;
+    updateGo();
+    const okCount = items.filter(it => it.status === 'done').length;
+    const zero = items.filter(it => it.status === 'done' && !it.boxes.length).length;
+    let msg = `偵測完成，共 ${okCount} 張`;
+    if (zero) msg += `，其中 ${zero} 張未偵測到任何部位`;
+    setStatus(msg, zero ? 'err' : '');
+  }
+
+  // ==========================================================================
+  // 預覽與互動編輯
+  // ==========================================================================
+
+  let viewScale = 1;   // 顯示座標 → 原圖座標的比例
+  let curBmp = null;
+  let curIndex = -1;
+
+  async function drawPreview() {
+    const token = ++previewToken;
+    const it = items[selected];
+    if (!it) {
+      stage.classList.remove('has');
+      pname.textContent = '';
+      detail.textContent = '';
+      return;
+    }
+
+    pname.textContent = it.name;
+
+    if (it.status === 'error') {
+      stage.classList.remove('has');
+      stage.querySelector('.hint').textContent = it.name + '：' + it.error;
+      detail.textContent = '';
+      return;
+    }
+    if (it.status === 'pending') {
+      stage.querySelector('.hint').textContent = '偵測中…';
+      detail.textContent = '';
+      return;
+    }
+
+    // 只保留目前這張的 bitmap，切換時換掉
+    if (curIndex !== selected) {
+      if (curBmp) { curBmp.close(); curBmp = null; }
+      try {
+        curBmp = await loadBitmap(it.file);
+      } catch { return; }
+      if (token !== previewToken) { curBmp.close(); curBmp = null; return; }
+      curIndex = selected;
+    }
+    if (token !== previewToken) return;
+
+    const maxW = stage.clientWidth || 380;
+    viewScale = Math.min(1, maxW / it.w);
+    canvas.width = Math.round(it.w * viewScale);
+    canvas.height = Math.round(it.h * viewScale);
+    stage.classList.add('has');
+    repaint();
+    updateDetail(it);
+  }
+
+  function repaint() {
+    const it = items[selected];
+    if (!it || !curBmp) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(curBmp, 0, 0, canvas.width, canvas.height);
+
+    for (const b of it.boxes) {
+      const x = b.x * viewScale, y = b.y * viewScale;
+      const w = b.w * viewScale, h = b.h * viewScale;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x, y, w, h);
+
+      if (b.inferred) {
+        ctx.strokeStyle = '#f8b72a';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        ctx.setLineDash([]);
+      }
+      if (b === selectedBox) {
+        ctx.strokeStyle = '#ff5a3c';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+      }
+    }
+  }
+
+  function updateDetail(it) {
+    if (!it || it.status !== 'done') { detail.textContent = ''; return; }
+    const n = it.boxes.length;
+    const inf = it.boxes.filter(b => b.inferred).length;
+    const parts = [...new Set(it.boxes.map(b => ({
+      BREAST: '胸', GENITALIA: '私處', BUTTOCKS: '臀', ANUS: '臀',
+    }[b.part] || '其他')))].join('、');
+
+    let html = n ? `${n} 個遮罩（${parts}）· 遮蓋 ${(it.areaPct * 100).toFixed(1)}%` : '';
+    if (inf) html += `　含 ${inf} 個推算`;
+    if (!n) html = '<span class="w">未偵測到任何部位，請人工確認</span>';
+    else if (it.areaPct > AREA_WARN) html += '　<span class="w">遮蓋過多，這張可能不能用</span>';
+    detail.innerHTML = html;
+  }
+
+  // ---- 滑鼠互動 ----
+
+  let selectedBox = null;
+  let drag = null;   // { mode:'new'|'move', startX, startY, box, ox, oy }
+
+  function toImg(ev) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (ev.clientX - r.left) * (canvas.width / r.width) / viewScale,
+      y: (ev.clientY - r.top) * (canvas.height / r.height) / viewScale,
+    };
+  }
+
+  function hitBox(p) {
+    const it = items[selected];
+    if (!it) return null;
+    // 由後往前找，讓上層的框優先被選到
+    for (let i = it.boxes.length - 1; i >= 0; i--) {
+      const b = it.boxes[i];
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return b;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('pointerdown', ev => {
+    const it = items[selected];
+    if (!it || it.status !== 'done') return;
+    // 某些情況下（合成事件、pointerId 已釋放）會拋錯，抓住就好，不影響拖曳本身
+    try { canvas.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+    const p = toImg(ev);
+    const hit = hitBox(p);
+    if (hit) {
+      selectedBox = hit;
+      drag = { mode: 'move', box: hit, ox: p.x - hit.x, oy: p.y - hit.y };
+    } else {
+      const box = { x: p.x, y: p.y, w: 0, h: 0, cls: 'MANUAL', score: 1, part: 'MANUAL', manual: true };
+      it.boxes.push(box);
+      selectedBox = box;
+      drag = { mode: 'new', box, startX: p.x, startY: p.y };
+    }
+    repaint();
+  });
+
+  canvas.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    const it = items[selected];
+    const p = toImg(ev);
+    if (drag.mode === 'new') {
+      drag.box.x = Math.min(drag.startX, p.x);
+      drag.box.y = Math.min(drag.startY, p.y);
+      drag.box.w = Math.abs(p.x - drag.startX);
+      drag.box.h = Math.abs(p.y - drag.startY);
+    } else {
+      drag.box.x = Math.max(0, Math.min(p.x - drag.ox, it.w - drag.box.w));
+      drag.box.y = Math.max(0, Math.min(p.y - drag.oy, it.h - drag.box.h));
+    }
+    repaint();
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const it = items[selected];
+    // 只是點一下沒有拖出範圍的話，不要留下一個看不見的空框
+    if (drag.mode === 'new' && (drag.box.w < 4 || drag.box.h < 4)) {
+      it.boxes = it.boxes.filter(b => b !== drag.box);
+      selectedBox = null;
+    }
+    drag = null;
+    it.areaPct = maskedRatio(it.boxes, it.w, it.h);
+    repaint();
+    render();
+    updateDetail(it);
+  });
+
+  window.addEventListener('keydown', ev => {
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    const it = items[selected];
+    if (!it || !selectedBox) return;
+    ev.preventDefault();
+    it.boxes = it.boxes.filter(b => b !== selectedBox);
+    // 刪掉推算框之後不能讓它自己長回來，所以記一筆
+    if (selectedBox.inferred) it.inferRejected = true;
+    selectedBox = null;
+    it.areaPct = maskedRatio(it.boxes, it.w, it.h);
+    repaint();
+    render();
+    updateDetail(it);
+  });
+
+  // ==========================================================================
+  // 清單
+  // ==========================================================================
+
+  function render() {
+    list.innerHTML = '';
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'option');
+      if (i === selected) li.classList.add('sel');
+
+      const img = document.createElement('img');
+      img.src = it.url;
+      img.alt = '';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = it.name;
+      const dim = document.createElement('div');
+      dim.className = 'dim';
+      dim.textContent = (it.file.size / 1024).toFixed(0) + ' KB' +
+                        (it.w ? ` · ${it.w}×${it.h}` : '');
+      meta.append(nm, dim);
+
+      const badges = document.createElement('div');
+      badges.className = 'badges';
+      if (it.status === 'pending') badges.append(badge('待處理'));
+      else if (it.status === 'error') badges.append(badge(it.error, 'bad'));
+      else {
+        const n = it.boxes.length;
+        badges.append(n ? badge(n + ' 個遮罩', 'ok') : badge('未偵測', 'bad'));
+        if (n && it.areaPct > AREA_WARN) badges.append(badge('遮蓋 ' + (it.areaPct * 100).toFixed(0) + '%', 'warn'));
+        if (it.boxes.some(b => b.inferred)) badges.append(badge('含推算', 'warn'));
+      }
+
+      li.append(img, meta, badges);
+      li.addEventListener('click', () => select(i));
+      li.addEventListener('keydown', ev => {
+        if (ev.key === 'ArrowDown') { ev.preventDefault(); select(Math.min(items.length - 1, i + 1)); }
+        if (ev.key === 'ArrowUp')   { ev.preventDefault(); select(Math.max(0, i - 1)); }
+        if (ev.key === 'Enter')     select(i);
+      });
+      list.append(li);
+    });
+  }
+
+  function badge(text, cls) {
+    const s = document.createElement('span');
+    s.className = 'badge' + (cls ? ' ' + cls : '');
+    s.textContent = text;
+    return s;
+  }
+
+  async function select(i) {
+    if (i < 0 || i >= items.length) return;
+    selected = i;
+    selectedBox = null;
+    render();
+    const li = list.children[i];
+    if (li) li.focus({ preventScroll: true });
+    await drawPreview();
+  }
+
+  // ==========================================================================
+  // 選檔
+  // ==========================================================================
+
+  function accept(files) {
+    clearItems();
+    items = [...files].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(f.name))
+      .map(f => ({
+        file: f, name: f.name, url: URL.createObjectURL(f),
+        w: 0, h: 0, boxes: [], status: 'pending', error: '', areaPct: 0,
+      }));
+    selected = items.length ? 0 : -1;
+    render();
+    updateGo();
+    if (items.length) {
+      select(0);
+      if (modelReady) runAll();
+      else if (location.protocol === 'file:') setStatus('模型未載入，無法偵測', 'err');
+      else setStatus('等待模型載入…');
+    }
+  }
+
+  function clearItems() {
+    for (const it of items) URL.revokeObjectURL(it.url);
+    if (curBmp) { curBmp.close(); curBmp = null; }
+    curIndex = -1;
+    items = [];
+    selected = -1;
+    selectedBox = null;
+    stage.classList.remove('has');
+    stage.querySelector('.hint').textContent = '選擇照片後，這裡會顯示遮罩結果';
+    pname.textContent = '';
+    detail.textContent = '';
+  }
+
+  drop.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', () => { if (picker.files.length) accept(picker.files); });
+  ['dragenter', 'dragover'].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('hot'); }));
+  ['dragleave', 'drop'].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('hot'); }));
+  drop.addEventListener('drop', ev => {
+    if (ev.dataTransfer.files.length) accept(ev.dataTransfer.files);
+  });
+
+  // ==========================================================================
+  // ZIP（store-only，手寫；與 index.html 同一套實作）
+  //
+  // 為什麼要打包：Safari 會靜默丟棄間隔太短的連續程式化下載，被丟掉的那筆連
+  // Safari 自己的下載紀錄都不會登記，使用者完全收不到錯誤。打包成單一下載可以
+  // 徹底避開。這裡刻意複製一份而不抽成共用檔——抽出去 index.html 就失去
+  // 「單一檔案、雙擊即用」的性質，那是這個專案的賣點。
+  // ==========================================================================
+
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function dosDateTime(d) {
+    return {
+      time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+      date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+    };
+  }
+
+  function makeZip(entries) {
+    const enc = new TextEncoder();
+    const { time, date } = dosDateTime(new Date());
+    const parts = [];
+    const central = [];
+    let offset = 0;
+
+    for (const e of entries) {
+      const nameBytes = enc.encode(e.name);
+      const crc = crc32(e.bytes);
+      const size = e.bytes.length;
+
+      const lh = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(lh.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);    // flag bit 11：檔名為 UTF-8（中文檔名需要）
+      lv.setUint16(8, 0, true);         // method 0 = store
+      lv.setUint16(10, time, true);
+      lv.setUint16(12, date, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      lh.set(nameBytes, 30);
+      parts.push(lh, e.bytes);
+
+      const ch = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, time, true);
+      cv.setUint16(14, date, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      ch.set(nameBytes, 46);
+      central.push(ch);
+
+      offset += lh.length + size;
+    }
+
+    const cdOffset = offset;
+    let cdSize = 0;
+    for (const c of central) { parts.push(c); cdSize += c.length; }
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, entries.length, true);
+    ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, cdSize, true);
+    ev.setUint32(16, cdOffset, true);
+    ev.setUint16(20, 0, true);
+    parts.push(eocd);
+
+    return new Blob(parts, { type: 'application/zip' });
+  }
+
+  function dedupe(name, used) {
+    if (!used.has(name)) { used.add(name); return name; }
+    const dot = name.lastIndexOf('.');
+    const stem = dot < 0 ? name : name.slice(0, dot);
+    const ext  = dot < 0 ? ''   : name.slice(dot);
+    let i = 2;
+    while (used.has(stem + '-' + i + ext)) i++;
+    const out = stem + '-' + i + ext;
+    used.add(out);
+    return out;
+  }
+
+  function zipName() {
+    const d = new Date();
+    const p = n => String(n).padStart(2, '0');
+    return 'censored-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+           '-' + p(d.getHours()) + p(d.getMinutes()) + '.zip';
+  }
+
+  function outName(src) {
+    const dot = src.lastIndexOf('.');
+    return (dot < 0 ? src : src.slice(0, dot)) + SUFFIX;
+  }
+
+  // ==========================================================================
+  // 輸出
+  // ==========================================================================
+
+  const outCanvas = document.createElement('canvas');
+  const outCtx = outCanvas.getContext('2d');
+
+  async function renderFinal(it) {
+    const bmp = await loadBitmap(it.file);
+    outCanvas.width = bmp.width;
+    outCanvas.height = bmp.height;
+    outCtx.drawImage(bmp, 0, 0);
+    outCtx.fillStyle = '#000';
+    for (const b of it.boxes) outCtx.fillRect(b.x, b.y, b.w, b.h);
+    bmp.close();
+    return new Promise(res => outCanvas.toBlob(res, 'image/jpeg', QUALITY));
+  }
+
+  function download(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  go.addEventListener('click', async () => {
+    const ready = items.filter(it => it.status === 'done');
+    if (!ready.length || busy) return;
+    busy = true;
+    go.disabled = true;
+
+    const used = new Set();
+    const entries = [];
+    let failed = 0;
+
+    for (let i = 0; i < ready.length; i++) {
+      setStatus(`輸出中 ${i + 1} / ${ready.length}…`);
+      try {
+        const blob = await renderFinal(ready[i]);
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        entries.push({ name: dedupe(outName(ready[i].name), used), bytes });
+      } catch (err) {
+        failed++;
+      }
+    }
+
+    if (!entries.length) {
+      setStatus('全部輸出失敗', 'err');
+    } else if (entries.length === 1) {
+      // 單張不多包一層 ZIP，行為與 index.html 一致
+      download(new Blob([entries[0].bytes], { type: 'image/jpeg' }), entries[0].name);
+      setStatus('已下載 1 張' + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
+    } else {
+      download(makeZip(entries), zipName());
+      setStatus(`已打包 ${entries.length} 張` + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
+    }
+
+    busy = false;
+    updateGo();
+  });
+
+  function updateGo() {
+    const n = items.filter(it => it.status === 'done').length;
+    go.disabled = busy || !n;
+    go.textContent = !items.length ? '選擇照片'
+      : n > 1 ? `打包下載 ${n} 張（ZIP）`
+      : n === 1 ? '下載 1 張'
+      : '沒有可輸出的照片';
+  }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls || '';
+  }
+
+  initModel();
+})();
+</script>
+</body>
+</html>
