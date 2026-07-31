@@ -75,7 +75,7 @@ CHROME_PATH=/usr/bin/google-chrome node tools/verify/verify.js
 
 ## 三、把驗證素材搬過去
 
-`test/` 有 **33 個檔案**（31 張商品照 + `test/reference/` 兩張手工遮罩成品），驗證全靠它們。
+`test/` 有 **34 個檔案**（31 張商品照 + `test/reference/` 三張手工遮罩成品），驗證全靠它們。
 
 **搬運方式：AirDrop、USB、或直接接線的區網傳輸。不要放雲端硬碟、不要用聊天軟體傳、不要進任何 git repo。** 這是成人商品照，同時也是這個專案「照片不離開這台電腦」原則的一部分。
 
@@ -86,7 +86,7 @@ node tools/verify/check-test-set.js
 ```
 
 ```
-33/33 相符
+34/34 相符
 ✓ 素材與清單一致
 ```
 
@@ -110,7 +110,7 @@ node tools/verify/verify-output.js         # 3. ZIP 結構、時間戳、原檔�
 在原開發機上，這三支的預期結果是：
 
 ```
-playwright test      16 passed
+playwright test      17 passed
 verify.js            31 張 · 🟢21 🟡1 🔴9 · 網路呼叫 0 次 · ✓ 與基準完全一致
 verify-output.js     ✓ 全部通過
 ```
@@ -121,7 +121,7 @@ verify-output.js     ✓ 全部通過
 
 | 測試群 | 在驗什麼 |
 |---|---|
-| 參考成品比對 | 我們的遮罩必須**完全包住** `test/reference/` 那兩張使用者手工做好的黑塊 |
+| 參考成品比對 | 我們的遮罩必須**完全包住** `test/reference/` 那三張使用者手工塗黑的**像素**（先剝掉成品的白邊——成品是 contain 進白底方形，不是縮放，這點搞錯會讓覆蓋率被系統性高估，見 design.md 決策 13）|
 | 裸露區域覆蓋 | `targets.json` 裡人工標定的裸露區域必須 **100% 被覆蓋**（該張若已被工具舉手為 🔴 則跳過） |
 | 全批不變式 | 不會有「有裸露卻既沒遮罩也沒舉手」的圖溜出去 |
 
@@ -183,7 +183,9 @@ const G = { ... }   // 幾何：帶子的位置與寬度，單位是「肩寬的
 const T = { ... }   // 門檻：信心值、結構合理性檢查的上下界
 ```
 
-想讓遮罩更貼身，主要的旋鈕是 `G.chest.t1`（胸部帶的下緣）。目前的遮罩聯集面積是使用者手工參考成品的 2.3–2.4 倍，主因就是胸部帶從鎖骨蓋到乳下緣、而手工的只蓋乳頭一帶。**調小它之後 playwright test 會立刻告訴你有沒有掉出 100% 覆蓋。**
+想讓遮罩更貼身，主要的旋鈕是 `G.chest.halfW`（胸部帶半寬）與 `G.chest.t1`（下緣）。目前的遮罩聯集面積是使用者手工參考成品的 2.1–2.3 倍，主因是胸部帶從鎖骨蓋到乳下緣、而手工的只蓋乳頭一帶。**調小它之後 playwright test 會立刻告訴你有沒有掉出 100% 覆蓋。**
+
+半身模式（`bust`）的胸部帶是**刻意鋪滿畫面寬**的，那不是算爆——理由見 design.md 決策 7d。要收窄它前先讀那一節。
 
 ---
 
@@ -203,7 +205,7 @@ const T = { ... }   // 門檻：信心值、結構合理性檢查的上下界
 
 分支 `feature/add-nudity-mask-tool`，從 `develop` 開出。
 
-OpenSpec change `add-nudity-mask-tool` 的 49 項任務全部完成，`openspec validate --strict` 通過。三支驗證全綠。
+OpenSpec change `add-nudity-mask-tool` 的 59 項任務全部完成，`openspec validate --strict` 通過。三支驗證全綠（在 macOS 與 Windows 上都跑過）。
 
 合回去的時候：
 

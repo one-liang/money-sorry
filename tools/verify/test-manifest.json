@@ -136,6 +136,10 @@
     "test/reference/ref-B.jpg": {
       "bytes": 204368,
       "sha256": "bf26a101eef60275217f5cf3d43c03fba249a1609bed73bbea12d185c02b8818"
+    },
+    "test/reference/ref-C.jpg": {
+      "bytes": 193316,
+      "sha256": "6f470d160901b16554fcad28abad1d133bd3c98cf4efd39b70482bb9483be742"
     }
   }
 }

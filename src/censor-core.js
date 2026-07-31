@@ -22,7 +22,13 @@
 
   // 遮罩幾何常數。t 為沿身體軸的位置、halfW 為半寬，單位皆為「肩寬」。
   const G = {
-    chest:     { t0: 0.30, t1: 1.15, halfW: 0.72 },
+    chest:     { t0: 0.30, t1: 1.15, halfW: 0.92 },
+    // 半身模式（沒有髖部錨點）＝近拍特寫。這正是肩寬最不足以當比例尺的情境：
+    // 軀幹前縮會壓扁肩寬投影，而胸部的橫向範圍不隨肩寬等比縮小。實測 10003_0
+    // 的肩寬只有 414px，使用者手工遮罩卻寬達 742px（1.79 倍肩寬），我們原本
+    // 只給 1.61 倍，左乳整個露在外面。橫向改為直接鋪滿畫面寬——近拍的胸高處
+    // 沒有需要保留的東西，而「橫向到底多寬」正是此模式最沒把握的一維。
+    bust:      { dt1: 0.25 },
     // 下半身帶的位置相對「髖部」而非肩線——髖部在軸上的位置 (torso/肩寬) 隨體型
     // 從 0.55 變化到 3.2，用肩寬的固定倍數定位會讓長軀幹的體型漏掉胯部。
     lower:     { dt0: -0.35, dt1: 1.00 },
@@ -30,7 +36,10 @@
     front:     { wMul: 1.15 },
     back:      { dt0: 0.15, dt1: 0.20, wMul: 1.25 },
     mLeg:      { dt0: -0.25, dt1: 1.20, kneeMul: 0.75 },
-    halfWCap:  1.45,        // 最終上限（朝向倍率之後才套用）。實測 1.30 對參考圖只剩 14px 餘裕，太緊
+    // 最終上限（朝向倍率之後才套用）。1.45 時下半身帶在三張參考成品上都被它卡住，
+    // 10006_0 左側只蓋到 0.130 而人工遮罩到 0.095——放到 1.70 後餘裕 30px。
+    // 再往上沒有意義：1.70 之後換 maxWidthFrac 接手，寬度不會再增加。
+    halfWCap:  1.70,
     maxWidthFrac: 0.92,       // 遮罩寬度不得超過畫面此比例，避免滿版看起來像壞掉
     pad:       0.12,
   };
@@ -115,7 +124,8 @@
     if (P.mode === 'full') { ax = (P.hm.x - sm.x) / P.torso; ay = (P.hm.y - sm.y) / P.torso; }
     const px = -ay, py = ax;                               // 垂直於軸
 
-    function rect(t0, t1, halfW) {
+    function rect(t0, t1, halfW, opt) {
+      opt = opt || {};
       // 上限在此統一套用，確保它是「最終」邊界而不是中途的值
       halfW = Math.min(halfW, G.halfWCap);
       const xs = [], ys = [];
@@ -127,18 +137,23 @@
       let x1 = Math.max.apply(null, xs), y1 = Math.max.apply(null, ys);
       const mw = (x1 - x0) * G.pad, mh = (y1 - y0) * G.pad;
       x0 -= mw; x1 += mw; y0 -= mh; y1 += mh;
-      // 寬度上限：超過就以中心等量收窄，而不是讓它撐到畫面兩端
+      // 寬度上限：超過就以中心等量收窄，而不是讓它撐到畫面兩端。
+      // 半身模式不套用——收窄是「以中心對稱」的，它假設中心對、只有寬度算爆了；
+      // 而半身模式的中心（肩中點）正是最不可靠的量，收窄反而會把遮罩推離目標。
       const maxW = w * G.maxWidthFrac;
-      if (x1 - x0 > maxW) {
+      if (!opt.fullWidth && x1 - x0 > maxW) {
         const cx = (x0 + x1) / 2;
         x0 = cx - maxW / 2; x1 = cx + maxW / 2;
       }
+      if (opt.fullWidth) { x0 = 0; x1 = w; }
       return { x0: Math.max(0, x0), y0: Math.max(0, y0),
                x1: Math.min(w, x1), y1: Math.min(h, y1) };
     }
 
-    const out = [rect(G.chest.t0, G.chest.t1, G.chest.halfW)];
-    if (P.mode !== 'full') return out;                     // 半身模式不憑空推測下半身
+    const bust = P.mode !== 'full';
+    const out = [rect(G.chest.t0, G.chest.t1 + (bust ? G.bust.dt1 : 0),
+                      G.chest.halfW, { fullWidth: bust })];
+    if (bust) return out;                                  // 半身模式不憑空推測下半身
 
     const hipT = P.torso / shoW;                           // 髖部在身體軸上的位置
     // 下半身帶的起點不得晚於胸部帶的終點，否則兩條帶之間會出現一條沒遮到的空隙
