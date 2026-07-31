@@ -3,3 +3,15 @@
 
 # Claude Code 本機設定（含機器專屬的權限授權，不進版控）
 .claude/settings.local.json
+
+# Playwright
+playwright-report/
+.playwright-mcp/
+tools/verify/node_modules/
+tools/verify/out/
+
+# test
+/test/
+
+# 註：models/320n.onnx（約 12MB）刻意進版控——clone 下來就能用，
+# 不需要額外的下載步驟。vendor/ 的 onnxruntime-web 同理。
