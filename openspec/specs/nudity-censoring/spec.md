@@ -1,0 +1,256 @@
+# nudity-censoring Specification
+
+## Purpose
+TBD - created by archiving change add-nudity-censor-page. Update Purpose after archive.
+## Requirements
+### Requirement: 獨立的遮罩頁面
+
+專案 SHALL 新增獨立頁面 `censor.html`，提供選圖、偵測、遮罩、輸出的完整流程。此頁 MUST NOT 修改 `index.html` 的行為，兩頁 MUST NOT 共用程式碼或互相呼叫。
+
+由於需載入約 12MB 的偵測模型，此頁 MUST 以 `http://` 協定開啟；MUST NOT 假設能以 `file://` 雙擊使用。頁面在偵測到自身以 `file://` 開啟時 SHALL 顯示明確指引，而非讓模型載入靜默失敗。
+
+視覺風格 SHALL 沿用 `index.html` 的設計語彙（cream/amber/brown 色系、左清單右預覽的雙欄佈局、圓角面板）。
+
+#### Scenario: 以本機 server 開啟
+
+- **WHEN** 使用者透過 `http://localhost` 開啟 `censor.html`
+- **THEN** 模型正常載入，介面顯示可用狀態
+
+#### Scenario: 誤以 file:// 雙擊開啟
+
+- **WHEN** 使用者雙擊 `censor.html`，瀏覽器以 `file://` 載入
+- **THEN** 頁面顯示「此頁需以本機 server 開啟」的指引與具體指令，MUST NOT 只顯示無說明的載入失敗
+
+#### Scenario: 不影響套框工具
+
+- **WHEN** 本變更完成後，使用者雙擊 `index.html`
+- **THEN** 套框工具行為與變更前完全一致，且不需要任何 server
+
+### Requirement: 應遮部位的偵測
+
+工具 SHALL 以物件偵測模型定位圖中的應遮部位，輸出每個部位的矩形框與信心分數。判定 MUST 基於**解剖位置**，MUST NOT 依賴「該處是否裸露」的判斷。
+
+下列類別 MUST 全數視為應遮，`EXPOSED` 與 `COVERED` 兩組 MUST 同等對待：
+
+- `FEMALE_BREAST_EXPOSED` / `FEMALE_BREAST_COVERED`
+- `FEMALE_GENITALIA_EXPOSED` / `FEMALE_GENITALIA_COVERED`
+- `BUTTOCKS_EXPOSED` / `BUTTOCKS_COVERED`
+- `ANUS_EXPOSED` / `ANUS_COVERED`
+- `MALE_GENITALIA_EXPOSED`
+
+信心閾值 SHALL 為 0.15，且解碼階段與 NMS 階段 MUST 使用同一個值。此值不得任意調高——實測 0.20 會失去 2 個私處框與 1 個臀部框，0.30 會使臀部框由 15 掉到 10；亦不宜調低——0.10 相對 0.15 只增加胸部框，對私處與臀部的召回毫無改善。
+
+推論 SHALL 全程於瀏覽器內執行。圖片 MUST NOT 被上傳至任何遠端服務；本機 server MUST 僅供應靜態檔案。
+
+#### Scenario: 真實露點
+
+- **WHEN** 來源圖為乳頭裸露的公仔照
+- **THEN** 該處被偵測為 `FEMALE_BREAST_EXPOSED` 並產生遮罩框
+
+#### Scenario: 原廠光暈遮蔽的部位
+
+- **WHEN** 來源圖的乳頭與胯下已被廠商以白色光暈糊化處理
+- **THEN** 該處仍 MUST 被偵測並遮罩——模型依據解剖結構而非皮膚可見度
+
+#### Scenario: 原廠貼紙遮蔽的部位
+
+- **WHEN** 來源圖的乳頭已被愛心貼紙蓋住
+- **THEN** 該處仍 MUST 被偵測並遮罩
+
+#### Scenario: 穿著比基尼或薄衣
+
+- **WHEN** 來源圖的人物穿著比基尼、丁字褲或其他極少布料的服裝
+- **THEN** 對應部位被偵測為 `COVERED` 類別並同樣產生遮罩框
+
+#### Scenario: 私處被光暈糊化
+
+- **WHEN** 來源圖的胯部已被廠商以白色光暈處理
+- **THEN** 該處 MUST 產生遮罩框——由偵測或由幾何補框產生皆可
+
+#### Scenario: 私處穿著內褲或比基尼下身
+
+- **WHEN** 來源圖的胯部覆蓋著內褲、比基尼下身或丁字褲
+- **THEN** 該處 MUST 產生遮罩框，MUST NOT 因為「已有布料覆蓋」而略過
+
+#### Scenario: 私處被貼紙遮蔽
+
+- **WHEN** 來源圖的胯部已被愛心貼紙或其他貼圖蓋住
+- **THEN** 該處 MUST 產生遮罩框
+
+#### Scenario: 下體過度裸露
+
+- **WHEN** 來源圖的下半身全裸或接近全裸
+- **THEN** 胯部 MUST 產生遮罩框
+
+#### Scenario: 背面臀部裸露
+
+- **WHEN** 來源圖為背面視角且臀部大面積裸露
+- **THEN** 該處被偵測為 `BUTTOCKS_EXPOSED` 或 `BUTTOCKS_COVERED` 並產生遮罩框
+
+#### Scenario: 無人物的圖
+
+- **WHEN** 來源圖不含人形（例如包裝盒照、配件特寫）
+- **THEN** 工具不產生任何遮罩框，並依「零命中警示」要求標示
+
+### Requirement: 遮罩框的合併與膨脹
+
+當同一部位在多次推論中產生重疊框時，工具 SHALL 以 NMS（非極大值抑制）保留信心最高的框並丟棄其餘。合併 MUST NOT 採用「取重疊框外接矩形」的方式——該做法會使框在多輪合併中持續膨脹，實測會產生橫跨整張畫面的遮罩。
+
+`EXPOSED` 與 `COVERED` 在合併時 MUST 視為同一部位；不同部位之間 MUST NOT 互相抑制。
+
+最終框 SHALL 向外等比膨脹一個固定比例後才繪製，以確保完整覆蓋。此膨脹 MUST 是框放大的唯一來源。
+
+#### Scenario: 同一部位在多解析度下重複偵測
+
+- **WHEN** 同一個胸部在兩種推論解析度下各產生一個高度重疊的框
+- **THEN** 只保留信心較高的那一個，且保留框的尺寸與原始偵測結果一致，MUST NOT 擴張為兩框的外接矩形
+
+#### Scenario: 胸與胯的框部分重疊
+
+- **WHEN** 一個 `FEMALE_BREAST` 框與一個 `FEMALE_GENITALIA` 框有部分重疊
+- **THEN** 兩框皆保留，MUST NOT 互相抑制
+
+#### Scenario: 同一部位的 EXPOSED 與 COVERED 重複
+
+- **WHEN** 同一處同時被判為 `FEMALE_BREAST_EXPOSED` 與 `FEMALE_BREAST_COVERED` 且兩框重疊
+- **THEN** 視為同一部位，只保留信心較高者
+
+### Requirement: 幾何補框
+
+當工具偵測到兩個胸部框、卻未偵測到任何私處框時，SHALL 依兩個胸部框的位置與間距推算胯部位置，強制補上一個遮罩框。此補框 MUST 在介面上被標示為「推算」而非「偵測」，使其可被使用者辨識並刪除。
+
+此規則存在的理由：實測中最常見且最危險的失敗型態，是「胸部有遮、下體沒遮」——而這類圖的胸部偵測都成功，代表人物位置已知。
+
+#### Scenario: 蹲姿且下體未被偵測
+
+- **WHEN** 來源圖偵測到左右兩個胸部框，但沒有任何 `FEMALE_GENITALIA` 框
+- **THEN** 工具依兩胸框推算胯部位置並補上一個遮罩框，該框在介面標示為推算
+
+#### Scenario: 下體已被偵測時不補框
+
+- **WHEN** 來源圖同時偵測到胸部框與私處框
+- **THEN** 工具 MUST NOT 額外補框
+
+#### Scenario: 只偵測到單一胸部框
+
+- **WHEN** 來源圖只偵測到一個胸部框（例如側面視角）
+- **THEN** 幾何推算的基準不足，工具 MUST NOT 補框
+
+### Requirement: 偵測不可靠時的警示
+
+工具 SHALL 在偵測結果可能不可靠時主動警示。所有警示 MUST 顯示於檔案清單，使使用者不必逐張點開即可看出哪些需要人工確認。
+
+工具 MUST NOT 在下列情況靜默放行：
+
+1. **零命中**：整張圖沒有產生任何遮罩框
+2. **遮罩面積過大**：遮罩總面積佔全圖比例超過門檻
+
+零命中同時涵蓋「本來就不需要遮」與「應該遮但漏了」兩種情況，工具 MUST NOT 嘗試自動區分，SHALL 一律交由使用者判斷。
+
+#### Scenario: 整張零命中
+
+- **WHEN** 某張圖沒有偵測到任何應遮部位
+- **THEN** 該列標示零命中警示，提示使用者人工確認
+
+#### Scenario: 真的不需要遮的圖也警示
+
+- **WHEN** 某張圖確實不含裸露（例如背面照被頭髮完全遮住）
+- **THEN** 該列同樣顯示零命中警示——工具 MUST NOT 因為「判斷它不用遮」而略過警示
+
+#### Scenario: 遮罩面積過大
+
+- **WHEN** 某張特寫照的遮罩總面積達全圖 91%
+- **THEN** 該列顯示面積警示，提示此圖遮罩後可能不堪使用、建議改用其他角度的照片
+
+#### Scenario: 正常比例不警示
+
+- **WHEN** 某張圖的遮罩面積為全圖 8%
+- **THEN** 該列不顯示任何警示
+
+### Requirement: 遮罩的人工調整
+
+工具 SHALL 允許使用者在預覽畫面上直接調整遮罩：新增、移動、刪除黑色方塊。自動偵測結果 MUST 被視為候選而非最終結果。
+
+調整 MUST 逐張獨立保存，切換預覽對象再切回時，先前的調整 MUST 保留。
+
+#### Scenario: 手動補上漏遮的部位
+
+- **WHEN** 使用者發現某張圖的下體未被遮住，在預覽上拖曳出一個矩形
+- **THEN** 該處新增一個黑色方塊，並納入最終輸出
+
+#### Scenario: 刪除誤遮的方塊
+
+- **WHEN** 某個方塊落在無關的背景區域，使用者選取後刪除
+- **THEN** 該方塊自輸出中移除
+
+#### Scenario: 調整後切換再切回
+
+- **WHEN** 使用者調整第 3 張的遮罩後切到第 5 張、再切回第 3 張
+- **THEN** 第 3 張的調整結果完整保留
+
+#### Scenario: 刪除推算補框
+
+- **WHEN** 幾何補框的位置明顯錯誤，使用者將其刪除
+- **THEN** 該框自輸出中移除，且 MUST NOT 在重新預覽時自動復原
+
+### Requirement: 遮罩的繪製與輸出
+
+遮罩 SHALL 以**黑色實心矩形**繪製，MUST NOT 使用馬賽克、模糊或其他樣式。
+
+輸出 MUST 維持來源圖的原始尺寸，MUST NOT 裁切或縮放。此限制的理由是遮罩必須在套框之前完成——套框會將圖裁成 1000×1000，若順序顛倒則偵測座標與輸出座標不一致。
+
+工具 SHALL 支援一次處理多張並批次輸出，且處理期間 SHALL 顯示進度。
+
+輸出**多張**時，工具 MUST 將全部成品打包成**單一 ZIP** 並只觸發一次下載；MUST NOT 逐檔觸發多次下載——Safari 會靜默丟棄間隔過短的連續程式化下載，且不留任何錯誤紀錄。輸出**單張**時 MUST 直接下載該圖檔，不包 ZIP。此行為 MUST 與 `index.html` 一致。
+
+ZIP MUST 以 store-only（method 0，不壓縮）格式產生，MUST NOT 引入外部函式庫。檔名 MUST 以 UTF-8 儲存並設定 general purpose flag bit 11。同名檔案 MUST 自動去重而不互相覆蓋。
+
+#### Scenario: 輸出尺寸不變
+
+- **WHEN** 來源圖為 1000×1300
+- **THEN** 輸出圖同為 1000×1300，僅多了黑色方塊
+
+#### Scenario: 遮罩樣式
+
+- **WHEN** 任一遮罩被繪製
+- **THEN** 該區域為純黑色實心矩形，其下的原始畫面不可辨識
+
+#### Scenario: 批次處理
+
+- **WHEN** 使用者一次選取 20 張圖
+- **THEN** 工具逐張偵測並顯示進度，全部完成後可一次輸出
+
+#### Scenario: 多張打包成單一 ZIP
+
+- **WHEN** 使用者處理 5 張圖並按下輸出
+- **THEN** 瀏覽器只觸發 **1 次**下載，內容為一個包含 5 張已遮罩圖片的 ZIP
+
+#### Scenario: 單張不打包
+
+- **WHEN** 使用者只處理 1 張圖並按下輸出
+- **THEN** 直接下載該圖檔本身，不產生 ZIP
+
+#### Scenario: ZIP 結構有效且中文檔名不亂碼
+
+- **WHEN** 來源檔名含中文（例如 `公仔照 A.jpg`）
+- **THEN** `unzip -t` 回報無錯誤，解壓後顯示為正確的中文檔名
+
+#### Scenario: 同名檔案不互相覆蓋
+
+- **WHEN** 使用者選取兩個檔名相同的圖片
+- **THEN** ZIP 內第二筆自動更名，兩筆皆完整保留
+
+### Requirement: 部分失敗仍可繼續
+
+當某張圖無法解碼或推論失敗時，工具 SHALL 標示該筆的失敗原因並繼續處理其餘檔案，MUST NOT 中止整批作業。
+
+#### Scenario: 混入無法解碼的檔案
+
+- **WHEN** 使用者選取 5 張圖，其中 1 張無法被瀏覽器解碼
+- **THEN** 其餘 4 張正常完成，該筆在清單標示失敗原因
+
+#### Scenario: 模型載入失敗
+
+- **WHEN** 模型檔缺失或載入失敗
+- **THEN** 頁面顯示明確錯誤與排除方式，MUST NOT 顯示為「偵測到 0 個部位」而讓使用者誤以為圖片安全
+
