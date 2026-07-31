@@ -1,7 +1,13 @@
 # nudity-censoring Specification
 
 ## Purpose
-TBD - created by archiving change add-nudity-censor-page. Update Purpose after archive.
+
+定義 `censor.html` 的行為：偵測公仔商品照中的裸露部位、以黑色方塊遮罩、允許人工調整，並在偵測不可靠時明確警示。
+
+判定基準是**解剖位置**而非「是否裸露」——真露點、原廠光暈遮蔽、貼紙遮蔽、比基尼四種狀態一律視為應遮。
+
+所有取捨一律偏向**多遮**：漏遮會導致商品下架，多遮只是圖不好看。自動偵測的結果永遠是候選而非定案，人工調整是本能力的必要組成，不是補丁。
+
 ## Requirements
 ### Requirement: 獨立的遮罩頁面
 
