@@ -11,10 +11,11 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const TEST_DIR = path.join(ROOT, 'test');
-const PAGE = 'file://' + path.join(ROOT, 'censor.html');
+const PAGE = pathToFileURL(path.join(ROOT, 'censor.html')).href;
 const TARGETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'targets.json'), 'utf8'));
 
 const b64 = rel => fs.readFileSync(path.join(TEST_DIR, rel)).toString('base64');

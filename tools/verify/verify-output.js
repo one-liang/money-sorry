@@ -4,22 +4,28 @@
 //
 //   node tools/verify/verify-output.js
 //
-// 不自驗自己的 ZIP 實作——產出後交給系統 unzip -t 與 macOS ditto 檢查，
+// 不自驗自己的 ZIP 實作——產出後交給系統上的外部解壓器檢查，
 // raw/ 的內容則以 SHA-256 與來源檔逐位元組比對。
+//
+// 每個平台都用兩個彼此獨立的實作（一個驗完整性、一個實際解壓）：
+//   macOS / Linux   Info-ZIP unzip  +  ditto（macOS）
+//   Windows         bsdtar（system32）+ .NET 的 ZipFile
 // ══════════════════════════════════════════════════════════════════════════
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { pathToFileURL } = require('url');
 const { spawn, execFileSync } = require('child_process');
+const { findChrome } = require('./chrome');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const TEST_DIR = path.join(ROOT, 'test');
 const PAGE = path.join(ROOT, 'censor.html');
 const PORT = 9412;
-const CHROME = process.env.CHROME_PATH ||
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = findChrome();
+const WIN = process.platform === 'win32';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = m => { console.error('✗ ' + m); process.exit(1); };
@@ -29,7 +35,67 @@ const check = (ok, label, detail) => {
   if (!ok) failures++;
 };
 
+// ── 外部 ZIP 工具 ──────────────────────────────────────────────────────
+const hasCmd = cmd => {
+  try { execFileSync(WIN ? 'where' : 'which', [cmd], { stdio: 'ignore' }); return true; }
+  catch { return false; }
+};
+const HAS_UNZIP = hasCmd('unzip');
+
+const ps = script => execFileSync('powershell',
+  ['-NoProfile', '-NonInteractive', '-Command', script],
+  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+/** 完整性檢查 → { ok, tool, detail } */
+function zipTest(zipPath) {
+  if (HAS_UNZIP) {
+    let out = '';
+    try { out = execFileSync('unzip', ['-t', zipPath], { encoding: 'utf8' }); }
+    catch (e) { out = String(e.stdout || e); }
+    return { ok: /No errors detected/.test(out), tool: 'unzip -t', detail: out.trim().split('\n').pop() };
+  }
+  // bsdtar 把每一筆都完整讀出來丟掉，libarchive 會逐筆比對 CRC32，壞了就非零退出
+  try {
+    execFileSync('tar', ['-xOf', zipPath], { maxBuffer: 1 << 30, stdio: ['ignore', 'ignore', 'pipe'] });
+    return { ok: true, tool: 'tar -xOf（逐筆驗 CRC32）', detail: '' };
+  } catch (e) {
+    return { ok: false, tool: 'tar -xOf（逐筆驗 CRC32）', detail: String(e.stderr || e.message).trim() };
+  }
+}
+
+/** 用與產生端無關的外部解壓器解開 → 使用的工具名稱；失敗時 throw */
+function zipExtract(zipPath, dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  if (process.platform === 'darwin') {
+    execFileSync('ditto', ['-xk', zipPath, dir]);
+    return 'ditto -xk';
+  }
+  if (WIN) {
+    // .NET 的 ZipFile：與上面驗完整性的 bsdtar 是兩套獨立實作，且會還原 mtime
+    ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem;` +
+       `[IO.Compression.ZipFile]::ExtractToDirectory('${zipPath}', '${dir}')`);
+    return '.NET ZipFile::ExtractToDirectory';
+  }
+  execFileSync('unzip', ['-o', '-q', zipPath, '-d', dir]);
+  return 'unzip -o';
+}
+
+/** 讀出 ZIP 內每一筆的修改時間（由外部工具解析 central directory）→ Date[] */
+function zipStamps(zipPath) {
+  if (WIN) {
+    const out = ps(`Add-Type -AssemblyName System.IO.Compression.FileSystem;` +
+      `[IO.Compression.ZipFile]::OpenRead('${zipPath}').Entries | ` +
+      `ForEach-Object { $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm') }`);
+    return out.trim().split(/\r?\n/).filter(Boolean).map(s => new Date(s.replace(' ', 'T')));
+  }
+  // Info-ZIP 的列表格式是 MM-DD-YYYY HH:MM
+  const list = execFileSync('unzip', ['-l', zipPath], { encoding: 'utf8' });
+  return [...list.matchAll(/(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2})/g)]
+    .map(m => new Date(+m[3], +m[1] - 1, +m[2], +m[4], +m[5]));
+}
+
 if (!fs.existsSync(PAGE)) die('找不到 censor.html，先跑 node build-censor.js');
+if (!CHROME || !fs.existsSync(CHROME)) die('找不到 Chrome，可用 CHROME_PATH 指定路徑');
 
 // 取 4 張涵蓋不同長寬比的圖，外加一組同名檔測試序號規則
 const picks = ['10006_0.jpg', 'FIGURE-206172_01.jpg', 'FIGURE-206175_01.jpg', 'FIGURE-013460_15.jpg']
@@ -40,7 +106,7 @@ if (picks.length < 2) die('test/ 內找不到足夠的驗證素材');
   const proc = spawn(CHROME, [
     '--headless=new', `--remote-debugging-port=${PORT}`, '--allow-file-access-from-files',
     '--no-first-run', `--user-data-dir=${path.join(os.tmpdir(), 'censor-verify-out')}`,
-    'file://' + PAGE,
+    pathToFileURL(PAGE).href,
   ], { stdio: 'ignore' });
 
   let page = null;
@@ -88,15 +154,15 @@ if (picks.length < 2) die('test/ 內找不到足夠的驗證素材');
     console.log(`ZIP ${(fs.statSync(zipPath).size / 1048576).toFixed(2)} MB，${r.names.length} 筆\n`);
 
     console.log('ZIP 結構');
-    let unzipOut = '';
-    try { unzipOut = execFileSync('unzip', ['-t', zipPath], { encoding: 'utf8' }); } catch (e) { unzipOut = String(e.stdout || e); }
-    check(/No errors detected/.test(unzipOut), 'unzip -t', unzipOut.trim().split('\n').pop());
+    const t = zipTest(zipPath);
+    check(t.ok, t.tool, t.detail);
 
     const ex = path.join(tmp, 'x');
+    let extractor = '';
     try {
-      execFileSync('ditto', ['-xk', zipPath, ex]);
-      check(true, 'ditto -xk 解壓成功');
-    } catch (e) { check(false, 'ditto -xk 解壓失敗', String(e.message)); }
+      extractor = zipExtract(zipPath, ex);
+      check(true, `${extractor} 解壓成功`);
+    } catch (e) { check(false, '外部解壓器解壓失敗', String(e.stderr || e.message).trim()); }
 
     console.log('\n目錄與檔名');
     check(fs.existsSync(path.join(ex, 'masked')), 'masked/ 存在');
@@ -112,10 +178,7 @@ if (picks.length < 2) die('test/ 內找不到足夠的驗證素材');
           '同名檔案自動加序號，未互相覆蓋');
 
     console.log('\n檔案時間戳');
-    const zipList = execFileSync('unzip', ['-l', zipPath], { encoding: 'utf8' });
-    // Info-ZIP 的列表格式是 MM-DD-YYYY HH:MM
-    const stamps = [...zipList.matchAll(/(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2})/g)]
-      .map(m => new Date(+m[3], +m[1] - 1, +m[2], +m[4], +m[5]));
+    const stamps = zipStamps(zipPath);
     check(stamps.length > 0, `ZIP 內含 ${stamps.length} 筆時間戳`);
     check(stamps.every(d => d.getFullYear() >= 2020), '沒有 1980-01-01 的預設值',
           stamps.length ? stamps[0].toLocaleString('sv') : '');

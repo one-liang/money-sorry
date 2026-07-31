@@ -29,12 +29,14 @@ for (const [rel, want] of Object.entries(manifest.files)) {
 }
 
 // 多出來的檔案不是錯，但值得說一聲——它們會進 verify.js 卻不在 baseline 裡
+// 清單裡一律是 / 分隔，Windows 的 path.relative 會給 \，比對前先正規化
 const listed = new Set(Object.keys(manifest.files));
+const slash = p => p.split(path.sep).join('/');
 const extras = fs.existsSync(path.join(ROOT, 'test'))
   ? (function walk(d) {
       return fs.readdirSync(d).flatMap(f => {
         const p = path.join(d, f);
-        return fs.statSync(p).isDirectory() ? walk(p) : [path.relative(ROOT, p)];
+        return fs.statSync(p).isDirectory() ? walk(p) : [slash(path.relative(ROOT, p))];
       });
     })(path.join(ROOT, 'test')).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && !listed.has(f))
   : [];

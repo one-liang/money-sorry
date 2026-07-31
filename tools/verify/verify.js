@@ -16,7 +16,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
+const { findChrome } = require('./chrome');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const TEST_DIR = path.join(ROOT, 'test');
@@ -24,8 +26,7 @@ const PAGE = path.join(ROOT, 'censor.html');
 const BASELINE = path.join(__dirname, 'baseline.json');
 const OUT_DIR = path.join(__dirname, 'out');
 const PORT = 9411;
-const CHROME = process.env.CHROME_PATH ||
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = findChrome();
 
 const argv = process.argv.slice(2);
 const UPDATE = argv.includes('--update');
@@ -36,7 +37,7 @@ const die = m => { console.error('✗ ' + m); process.exit(1); };
 
 if (!fs.existsSync(PAGE)) die('找不到 censor.html，先跑 node build-censor.js');
 if (!fs.existsSync(TEST_DIR)) die('找不到 test/（素材不進版控，需自行放置商品照）');
-if (!fs.existsSync(CHROME)) die('找不到 Chrome，可用 CHROME_PATH 指定路徑');
+if (!CHROME || !fs.existsSync(CHROME)) die('找不到 Chrome，可用 CHROME_PATH 指定路徑');
 
 const files = fs.readdirSync(TEST_DIR).filter(f => /\.(jpe?g|png|webp)$/i.test(f)).sort();
 if (!files.length) die('test/ 內沒有圖片');
@@ -47,7 +48,7 @@ async function connect() {
     '--headless=new', `--remote-debugging-port=${PORT}`, '--allow-file-access-from-files',
     '--no-first-run', '--no-default-browser-check',
     `--user-data-dir=${path.join(require('os').tmpdir(), 'censor-verify-profile')}`,
-    'file://' + PAGE,
+    pathToFileURL(PAGE).href,
   ], { stdio: 'ignore' });
 
   let page = null;

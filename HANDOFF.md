@@ -14,7 +14,7 @@ cd money-sorry
 git checkout feature/add-nudity-mask-tool
 
 node build-censor.js                    # 產生 censor.html（約 18MB，不需網路）
-open censor.html                        # 就可以用了
+open censor.html                        # 就可以用了（Windows 用 start，或直接雙擊）
 ```
 
 **建置不需要網路**，模型權重已經在 `assets/model/` 裡（理由見 `assets/model/SOURCE.md`）。
@@ -30,13 +30,20 @@ open censor.html                        # 就可以用了
 | npm 套件 | 只有 `@playwright/test` | 只有 `tools/verify/` 用得到；工具本身零相依 |
 | GPU | 有 WebGL 硬體加速為佳 | 沒有會退回 CPU，慢一到兩個數量級但結果一樣 |
 
-`verify.js` / `verify-output.js` 預設去找 macOS 的 Chrome 路徑，其他系統要指定：
+`verify.js` / `verify-output.js` 會自動找 macOS / Windows / Linux 上的 Chrome（`tools/verify/chrome.js`）。裝在非預設位置時指定：
 
 ```bash
 CHROME_PATH=/usr/bin/google-chrome node tools/verify/verify.js
 ```
 
-> **`verify-output.js` 目前只能在 macOS 跑**，它用 `ditto -xk` 解壓 ZIP 來做外部驗證。要在 Linux/Windows 跑得換成 `unzip -o`（`unzip -t` 那段是跨平台的，只有解壓那行要改）。
+> **三支驗證在 macOS 與 Windows 都能跑。** `verify-output.js` 的外部驗證工具依平台而異——原則是「不自驗自己的 ZIP 實作」，所以每個平台都用兩個彼此獨立的實作，一個驗完整性、一個實際解壓：
+>
+> | | 完整性 | 解壓 |
+> |---|---|---|
+> | macOS / Linux | Info-ZIP `unzip -t` | `ditto -xk`（macOS）／ `unzip -o` |
+> | Windows | `tar -xOf`（system32 的 bsdtar，逐筆驗 CRC32） | .NET `ZipFile::ExtractToDirectory` |
+>
+> Windows 沒有內建 `unzip`（Git Bash 帶的那支不在 Windows PATH 上）。若你的 Windows 上另外裝了 Info-ZIP 並加進 PATH，完整性那關會自動優先用 `unzip -t`。
 
 ---
 
@@ -124,7 +131,7 @@ verify-output.js     ✓ 全部通過
 
 逐張比對遮罩座標與 `baseline.json`，容許 1.0px。它不知道什麼叫「對」，只知道「跟上次一不一樣」。
 
-> **跨機器的注意事項**：目前只在單一台 Mac 上驗過 run-to-run 穩定（改用 tf tensor 前處理之後才穩定的，見 design.md）。**不同 GPU / 驅動的 WebGL 浮點實作有差異空間，換機器後這支出現幾 px 的差是有可能的，那不必然是程式壞了。**
+> **跨機器的注意事項**：基準是在 Mac（Apple M4）上建立的。2026-07-31 在 Windows 10 + 另一顆 GPU 上重跑，**31 張全部與基準完全一致，0px 差異**——比原先預期的樂觀。但這只是第二個資料點，**不同 GPU / 驅動的 WebGL 浮點實作仍有差異空間，換機器後出現幾 px 的差不必然是程式壞了。**
 >
 > 判斷方式：**先看 playwright test**。它綠、而 verify.js 只差幾 px → 是機器差異，在新機器上跑 `--update` 重建基準即可。playwright test 也紅 → 是真的迴歸，不要 update。
 
@@ -135,7 +142,7 @@ node tools/verify/verify.js --update       # 確認無誤後才更新基準
 
 **3. `node tools/verify/verify-output.js` —— 輸出路徑**
 
-ZIP 交給系統 `unzip -t` 與 `ditto` 檢查（不自驗自己的 ZIP 實作），`raw/` 用 SHA-256 比對是否位元組層級相同，加上檔案時間戳與成品尺寸。
+ZIP 交給系統上的外部解壓器檢查（不自驗自己的 ZIP 實作，工具依平台而異見第一節），`raw/` 用 SHA-256 比對是否位元組層級相同，加上檔案時間戳與成品尺寸。
 
 ### 什麼時候一定要跑
 
