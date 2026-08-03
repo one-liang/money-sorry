@@ -16,6 +16,18 @@
     --line:   #e6d7bd;
     --ok:     #2f7d4f;
     --bad:    #b3402c;
+ 
+
+    /* 字級：兩頁共用同一套級距，不要再出現一次性的數字 */
+    --fs-h1:    26px;    /* 頁面標題 */
+    --fs-label: 13px;    /* 區塊標題（選擇照片／預覽／使用說明…） */
+    --fs-lead:  13.5px;  /* 副標、導覽、檔名 */
+    --fs-body:  13px;    /* 一般說明文字 */
+    --fs-meta:  12px;    /* 次要資訊（尺寸、狀態、備註） */
+    --fs-badge: 11.5px;  /* 清單上的小標籤 */
+    --fs-action: 15.5px; /* 主要行動：選檔區標題、輸出按鈕 */
+
+    --note:   #6b5433;   /* 說明文字色，比 ink 淡、比 muted 深 */
   }
   * { box-sizing: border-box; }
   body {
@@ -43,7 +55,7 @@
     text-align: center;
     border-radius: 8px;
     text-decoration: none;
-    font-size: 13.5px;
+    font-size: var(--fs-lead);
     font-weight: 600;
     color: var(--muted);
     transition: background .12s, color .12s;
@@ -58,12 +70,12 @@
   header { margin-bottom: 28px; }
   h1 {
     margin: 0 0 6px;
-    font-size: 26px;
+    font-size: var(--fs-h1);
     letter-spacing: .02em;
     color: var(--brown);
   }
   h1 span { color: var(--amber); }
-  .sub { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .sub { margin: 0; color: var(--muted); font-size: var(--fs-lead); }
 
   .grid {
     display: grid;
@@ -82,7 +94,7 @@
   .panel + .panel { margin-top: 18px; }
   .panel h2 {
     margin: 0 0 12px;
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: .08em;
     text-transform: uppercase;
     color: var(--muted);
@@ -100,8 +112,8 @@
     background: #fffdf8;
   }
   #drop:hover, #drop.hot { border-color: var(--amber); background: #fffaf0; }
-  #drop strong { display: block; font-size: 16px; color: var(--brown); margin-bottom: 4px; }
-  #drop small { color: var(--muted); }
+  #drop strong { display: block; font-size: var(--fs-action); color: var(--brown); margin-bottom: 4px; }
+  #drop small { color: var(--muted); font-size: var(--fs-meta); }
   #picker { display: none; }
 
   /* ---- file list ---- */
@@ -134,11 +146,11 @@
   #list .meta { min-width: 0; flex: 1; }
   #list .name {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    font-size: 13.5px;
+    font-size: var(--fs-lead);
   }
-  #list .dim { color: var(--muted); font-size: 12px; }
+  #list .dim { color: var(--muted); font-size: var(--fs-meta); }
   #list .badge {
-    flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    flex: none; font-size: var(--fs-badge); padding: 3px 9px; border-radius: 999px;
     background: #f2ead9; color: var(--muted); white-space: nowrap;
   }
   #list .badge.ok  { background: #e4f2e9; color: var(--ok); }
@@ -159,13 +171,13 @@
   #stage img { width: 100%; height: 100%; object-fit: contain; display: none; transition: opacity .12s; }
   #stage.has img { display: block; }
   #stage.busy img { opacity: .35; }
-  #stage .hint { color: var(--muted); font-size: 13px; text-align: center; padding: 0 24px; }
+  #stage .hint { color: var(--muted); font-size: var(--fs-body); text-align: center; padding: 0 24px; }
   #stage.has .hint { display: none; }
 
   #pname {
     margin-top: 8px;
     min-height: 18px;
-    font-size: 12.5px;
+    font-size: var(--fs-meta);
     color: var(--muted);
     text-align: center;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -176,7 +188,7 @@
     margin-top: 16px;
     width: 100%;
     padding: 14px 18px;
-    font: 600 15.5px/1 inherit;
+    font: 600 var(--fs-action)/1 inherit;
     color: var(--brown);
     background: var(--amber);
     border: none;
@@ -192,7 +204,7 @@
   #status {
     margin-top: 10px;
     min-height: 20px;
-    font-size: 13px;
+    font-size: var(--fs-body);
     color: var(--muted);
     text-align: center;
   }
@@ -203,7 +215,9 @@
   .notes > summary {
     padding: 11px 18px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: .08em;
     color: var(--muted);
     list-style: none;
   }
@@ -212,7 +226,7 @@
   .notes[open] > summary::before { content: '▾ '; }
   .notes > summary:hover { color: var(--brown); }
   .notes ul { margin: 0; padding: 0 18px 14px 36px; }
-  .notes li { font-size: 13px; color: #6b5433; margin: 3px 0; }
+  .notes li { font-size: var(--fs-body); color: var(--note); margin: 3px 0; }
 </style>
 </head>
 <body>
