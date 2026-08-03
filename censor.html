@@ -285,7 +285,7 @@
         <div id="detail"></div>
 
         <div class="editnote">
-          <b>在圖上拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · 選取後按 <b>Delete</b> 刪除<br>
+          <b>在圖上拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · <b>拉邊角的白點</b>調整大小 · 選取後按 <b>Delete</b> 刪除<br>
           虛線框是<b>推算</b>的遮罩（模型沒偵測到下體時自動補上），位置不對就刪掉
         </div>
 
@@ -732,25 +732,48 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(curBmp, 0, 0, canvas.width, canvas.height);
 
-    for (const b of it.boxes) {
-      const x = b.x * viewScale, y = b.y * viewScale;
-      const w = b.w * viewScale, h = b.h * viewScale;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(x, y, w, h);
+    // 分兩趟畫：先全部填黑，裝飾才不會被後面畫的方塊蓋掉。
+    // 遮罩重疊很常見，一趟畫完會讓選取框的把手被鄰框蓋住、變得抓不到。
+    const rect = b => [b.x * viewScale, b.y * viewScale, b.w * viewScale, b.h * viewScale];
 
-      if (b.inferred) {
-        ctx.strokeStyle = '#f8b72a';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-        ctx.setLineDash([]);
-      }
-      if (b === selectedBox) {
+    ctx.fillStyle = '#000';
+    for (const b of it.boxes) ctx.fillRect(...rect(b));
+
+    for (const b of it.boxes) {
+      if (!b.inferred) continue;
+      const [x, y, w, h] = rect(b);
+      ctx.strokeStyle = '#f8b72a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.setLineDash([]);
+    }
+
+    if (selectedBox && it.boxes.includes(selectedBox)) {
+      const [x, y, w, h] = rect(selectedBox);
+      ctx.strokeStyle = '#ff5a3c';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+      // 八個縮放把手。方塊是全黑的，把手要白底深框才看得見。
+      for (const [hx, hy] of handlePoints(x, y, w, h)) {
+        ctx.fillStyle = '#fff';
         ctx.strokeStyle = '#ff5a3c';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(hx - HANDLE_PX / 2, hy - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+        ctx.fill();
+        ctx.stroke();
       }
     }
+  }
+
+  /** 八個把手的中心點（畫布座標），順序與 HANDLES 對應 */
+  function handlePoints(x, y, w, h) {
+    return [
+      [x, y], [x + w / 2, y], [x + w, y],
+      [x, y + h / 2], [x + w, y + h / 2],
+      [x, y + h], [x + w / 2, y + h], [x + w, y + h],
+    ];
   }
 
   function updateDetail(it) {
@@ -771,7 +794,17 @@
   // ---- 滑鼠互動 ----
 
   let selectedBox = null;
-  let drag = null;   // { mode:'new'|'move', startX, startY, box, ox, oy }
+  let drag = null;   // { mode:'new'|'move'|'resize', ... }
+
+  // 把手：id 決定哪幾條邊會跟著動（n=上 s=下 w=左 e=右），順序同 handlePoints
+  const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+  const HANDLE_PX = 9;   // 畫布上的把手邊長
+  const CURSORS = {
+    nw: 'nwse-resize', se: 'nwse-resize',
+    ne: 'nesw-resize', sw: 'nesw-resize',
+    n: 'ns-resize', s: 'ns-resize',
+    w: 'ew-resize', e: 'ew-resize',
+  };
 
   function toImg(ev) {
     const r = canvas.getBoundingClientRect();
@@ -779,6 +812,21 @@
       x: (ev.clientX - r.left) * (canvas.width / r.width) / viewScale,
       y: (ev.clientY - r.top) * (canvas.height / r.height) / viewScale,
     };
+  }
+
+  /**
+   * 命中哪個縮放把手（只有選取中的方塊才有把手）。
+   * 容差用畫布像素換算回原圖座標，這樣不管圖被縮多小，把手都一樣好點。
+   */
+  function hitHandle(p) {
+    if (!selectedBox) return null;
+    const b = selectedBox;
+    const tol = (HANDLE_PX / 2 + 3) / viewScale;
+    const pts = handlePoints(b.x, b.y, b.w, b.h);
+    for (let i = 0; i < pts.length; i++) {
+      if (Math.abs(p.x - pts[i][0]) <= tol && Math.abs(p.y - pts[i][1]) <= tol) return HANDLES[i];
+    }
+    return null;
   }
 
   function hitBox(p) {
@@ -798,6 +846,15 @@
     // 某些情況下（合成事件、pointerId 已釋放）會拋錯，抓住就好，不影響拖曳本身
     try { canvas.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
     const p = toImg(ev);
+    // 把手優先於方塊本身，否則靠邊的把手會被判成「移動」
+    const handle = hitHandle(p);
+    if (handle) {
+      const b = selectedBox;
+      drag = { mode: 'resize', box: b, handle,
+               orig: { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h } };
+      repaint();
+      return;
+    }
     const hit = hitBox(p);
     if (hit) {
       selectedBox = hit;
@@ -812,14 +869,36 @@
   });
 
   canvas.addEventListener('pointermove', ev => {
-    if (!drag) return;
     const it = items[selected];
+    if (!drag) {
+      // 沒在拖的時候給游標提示，讓人知道邊角可以拉
+      if (it && it.status === 'done') {
+        const h = hitHandle(toImg(ev));
+        canvas.style.cursor = h ? CURSORS[h] : (hitBox(toImg(ev)) ? 'move' : 'crosshair');
+      }
+      return;
+    }
     const p = toImg(ev);
     if (drag.mode === 'new') {
       drag.box.x = Math.min(drag.startX, p.x);
       drag.box.y = Math.min(drag.startY, p.y);
       drag.box.w = Math.abs(p.x - drag.startX);
       drag.box.h = Math.abs(p.y - drag.startY);
+    } else if (drag.mode === 'resize') {
+      const o = drag.orig;
+      const h = drag.handle;
+      const cx = v => Math.max(0, Math.min(v, it.w));
+      const cy = v => Math.max(0, Math.min(v, it.h));
+      let { x1, y1, x2, y2 } = o;
+      if (h.includes('n')) y1 = cy(p.y);
+      if (h.includes('s')) y2 = cy(p.y);
+      if (h.includes('w')) x1 = cx(p.x);
+      if (h.includes('e')) x2 = cx(p.x);
+      // 拉過頭讓邊互換時用 min/max 收拾，框不會翻成負的寬高
+      drag.box.x = Math.min(x1, x2);
+      drag.box.y = Math.min(y1, y2);
+      drag.box.w = Math.abs(x2 - x1);
+      drag.box.h = Math.abs(y2 - y1);
     } else {
       drag.box.x = Math.max(0, Math.min(p.x - drag.ox, it.w - drag.box.w));
       drag.box.y = Math.max(0, Math.min(p.y - drag.oy, it.h - drag.box.h));
@@ -830,10 +909,10 @@
   canvas.addEventListener('pointerup', () => {
     if (!drag) return;
     const it = items[selected];
-    // 只是點一下沒有拖出範圍的話，不要留下一個看不見的空框
-    if (drag.mode === 'new' && (drag.box.w < 4 || drag.box.h < 4)) {
+    // 只是點一下沒有拖出範圍、或被拉到幾乎沒有面積的框，都不要留著
+    if (drag.mode !== 'move' && (drag.box.w < 4 || drag.box.h < 4)) {
       it.boxes = it.boxes.filter(b => b !== drag.box);
-      selectedBox = null;
+      if (selectedBox === drag.box) selectedBox = null;
     }
     drag = null;
     it.areaPct = maskedRatio(it.boxes, it.w, it.h);
