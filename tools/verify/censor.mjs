@@ -71,11 +71,20 @@ const run = async () => {
 
     // --- 2. http 下正常載入模型 ---------------------------------------------
     console.log('\n[2] http:// 載入模型');
+    const gets = [];
+    const onReq = r => { if (r.method() === 'GET') gets.push(new URL(r.url()).pathname); };
+    page.on('request', onReq);
     await page.goto(`http://localhost:${PORT}/censor.html`);
     await waitModel(page);
+    page.off('request', onReq);
     const ready = (await page.locator('#model-bar').getAttribute('class')).includes('ready');
     check('模型載入成功', ready);
     check('不顯示 file:// 告示', !(await page.locator('#protocol-gate.show').isVisible()));
+    // 自己抓 wasm 再餵給 ort.env.wasm.wasmBinary，就不該再被 ORT 抓第二次
+    const wasmGets = gets.filter(p => p.endsWith('.wasm')).length;
+    const onnxGets = gets.filter(p => p.endsWith('.onnx')).length;
+    check('runtime 與模型各只下載一次', wasmGets === 1 && onnxGets === 1,
+      `.wasm ${wasmGets} 次、.onnx ${onnxGets} 次`);
     if (!ready) throw new Error('模型載不起來，後面的測試沒有意義');
 
     // --- 3. 批次偵測 ---------------------------------------------------------

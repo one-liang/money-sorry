@@ -25,7 +25,35 @@
     color: var(--ink);
     font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
   }
-  .wrap { max-width: 980px; margin: 0 auto; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ---- 兩個工具之間的導覽 ---- */
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 22px;
+    padding: 5px;
+    background: #f6ecd9;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  nav.tabs a {
+    flex: 1;
+    padding: 9px 14px;
+    text-align: center;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  nav.tabs a:hover { color: var(--brown); background: #fffaf0; }
+  nav.tabs a[aria-current="page"] {
+    background: #fff;
+    color: var(--brown);
+    box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
 
   header { margin-bottom: 28px; }
   h1 {
@@ -171,17 +199,33 @@
   #status.done { color: var(--ok); font-weight: 600; }
   #status.err  { color: var(--bad); }
 
-  .notes { margin: 22px 0 0; padding: 14px 18px; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
-  .notes ul { margin: 0; padding-left: 18px; }
+  .notes { margin: 22px 0 0; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
+  .notes > summary {
+    padding: 11px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    list-style: none;
+  }
+  .notes > summary::-webkit-details-marker { display: none; }
+  .notes > summary::before { content: '▸ '; }
+  .notes[open] > summary::before { content: '▾ '; }
+  .notes > summary:hover { color: var(--brown); }
+  .notes ul { margin: 0; padding: 0 18px 14px 36px; }
   .notes li { font-size: 13px; color: #6b5433; margin: 3px 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
+  <nav class="tabs">
+    <a href="index.html" aria-current="page">賣場批次套框</a>
+    <a href="censor.html">裸露遮罩</a>
+  </nav>
+
   <header>
     <h1>錢錢抱歉 <span>·</span> 賣場批次套框</h1>
-    <p class="sub">一次選多張商品照，每張各自置中裁切成 1000×1000 並套上外框，打包成一個 ZIP 下載。全程在本機處理，照片不會離開這台電腦。</p>
+    <p class="sub">一次選多張商品照，裁切成 1000×1000 並套上外框，打包成 ZIP 下載。</p>
   </header>
 
   <div class="grid">
@@ -214,7 +258,8 @@
 
   </div>
 
-  <div class="notes">
+  <details class="notes">
+    <summary>使用說明與注意事項</summary>
     <ul>
       <li>外框的兩個橫幅會蓋住照片的<strong>左上角</strong>與<strong>右下角</strong>，商品主體請盡量置中。</li>
       <li>來源照片短邊建議 ≥ 1000px，否則會被放大而略糊。</li>
@@ -223,7 +268,7 @@
       <li>多張會打包成<strong>一個 ZIP</strong> 下載（單張則直接給 JPG）。ZIP 內不壓縮——JPEG 本來就壓過了。</li>
       <li>iPhone 的 HEIC 檔請用 <strong>Safari</strong> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
-  </div>
+  </details>
 
 </div>
 

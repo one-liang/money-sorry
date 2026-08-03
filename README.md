@@ -14,7 +14,27 @@
 
 遮罩工具沒辦法雙擊，是因為它要載入一個 12MB 的偵測模型——瀏覽器在 `file://` 下把每個本機檔案當成獨立來源，會直接擋掉模型載入。套框工具完全不受影響，維持原本零依賴的性質。
 
+兩頁上方都有導覽列可以互相切換。
+
 **順序很重要：先遮罩，再套框。** 套框會把圖裁成 1000×1000，先套框的話遮罩座標就對不上了。
+
+## 部署到 GitHub Pages
+
+掛上 Pages 之後走的是 HTTPS，遮罩工具就不必再跑 `serve.cmd`，點連結即可使用。
+
+設定：**Settings → Pages → Deploy from branch → `main` → `/ (root)`**。倉庫已備妥 `.nojekyll`，避免 Jekyll 處理靜態資產。
+
+已實測確認：
+
+| 條件 | 結果 |
+|---|---|
+| 掛在子路徑（`<user>.github.io/money-sorry/`） | 相對路徑正常 |
+| `.wasm` 的 MIME 不是 `application/wasm` | 照樣載入（ORT 會退回 ArrayBuffer 方式） |
+| 需要 COOP/COEP 標頭 | **不需要**，推論固定單執行緒、沒用到 SharedArrayBuffer |
+
+首次造訪需下載約 **22MB**（runtime 11MB + 模型 12MB），畫面會顯示下載進度，之後走瀏覽器快取。Pages 每月流量軟上限 100GB，約可支撐數千次全新造訪。
+
+照片依然只在瀏覽器內處理，不會上傳到任何地方——變的只是「網頁本身」來自 GitHub 而非磁碟。`test/` 已被 `.gitignore` 排除，測試素材不會被公開。
 
 ## 使用方式（套框）
 
@@ -188,6 +208,7 @@ node tools/verify/censor.mjs   # 預設吃 test/ 裡的圖
 
 ```
 money-sorry/
+├── .nojekyll                     # 讓 GitHub Pages 原樣供應靜態資產
 ├── index.html                    # 套框：HTML + CSS + JS + 內嵌外框（約 70KB，雙擊即用）
 ├── censor.html                   # 遮罩：HTML + CSS + JS（需要 server）
 ├── serve.cmd                     # 起本機 server（npx serve）
