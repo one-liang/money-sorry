@@ -28,6 +28,34 @@
   }
   .wrap { max-width: 1080px; margin: 0 auto; }
 
+  /* ---- 兩個工具之間的導覽 ---- */
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 22px;
+    padding: 5px;
+    background: #f6ecd9;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  nav.tabs a {
+    flex: 1;
+    padding: 9px 14px;
+    text-align: center;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  nav.tabs a:hover { color: var(--brown); background: #fffaf0; }
+  nav.tabs a[aria-current="page"] {
+    background: #fff;
+    color: var(--brown);
+    box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
+
   header { margin-bottom: 28px; }
   h1 {
     margin: 0 0 6px;
@@ -105,6 +133,29 @@
   #model-bar.ready .dot { background: var(--ok); }
   #model-bar.fail  .dot { background: var(--bad); }
   #model-bar.fail  { color: var(--bad); }
+  #model-msg { flex: none; }
+
+  /* 首次載入要抓 22MB，沒有進度就是一段沒有回饋的長等待 */
+  #model-progress {
+    flex: 1;
+    height: 6px;
+    min-width: 60px;
+    border-radius: 999px;
+    background: #f0e4cd;
+    overflow: hidden;
+    display: none;
+  }
+  #model-bar.loading #model-progress { display: block; }
+  #model-progress i {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: var(--amber);
+    transition: width .2s ease-out;
+  }
+  #model-pct { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); display: none; }
+  #model-bar.loading #model-pct { display: block; }
 
   /* ---- drop zone ---- */
   #drop {
@@ -246,9 +297,14 @@
 <body>
 <div class="wrap">
 
+  <nav class="tabs">
+    <a href="index.html">賣場批次套框</a>
+    <a href="censor.html" aria-current="page">裸露遮罩</a>
+  </nav>
+
   <header>
     <h1>錢錢抱歉 <span>·</span> 裸露遮罩</h1>
-    <p class="sub">自動偵測公仔照的胸部、私處與臀部並疊上黑色方塊，可手動增減。全程在本機處理，照片不會離開這台電腦。</p>
+    <p class="sub">自動偵測公仔照的胸部、私處與臀部並疊上黑色方塊，可手動增減。</p>
   </header>
 
   <div id="protocol-gate">
@@ -258,7 +314,12 @@
     <p style="color:var(--muted)">套框工具 <code>index.html</code> 不受影響，仍然可以直接雙擊使用。</p>
   </div>
 
-  <div id="model-bar"><span class="dot"></span><span id="model-msg">正在載入偵測模型…</span></div>
+  <div id="model-bar">
+    <span class="dot"></span>
+    <span id="model-msg">正在載入偵測模型…</span>
+    <span id="model-progress"><i></i></span>
+    <span id="model-pct"></span>
+  </div>
 
   <div class="grid">
 
@@ -296,14 +357,16 @@
 
   </div>
 
-  <div class="notes">
+  <details class="notes">
+    <summary>使用說明與注意事項</summary>
     <ul>
-      <li>遮罩要在<b>套框之前</b>做。輸出維持原尺寸，之後再丟進 <code>index.html</code> 套框。</li>
+      <li>遮罩要在<b>套框之前</b>做。輸出維持原尺寸，之後再切到「賣場批次套框」處理。</li>
       <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
       <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
       <li>沒偵測到任何部位的照片會標成「未偵測」——可能是真的不用遮，也可能是漏了，一律請人工看過。</li>
+      <li>照片全程在瀏覽器內處理，不會上傳到任何地方。</li>
     </ul>
-  </div>
+  </details>
 
 </div>
 
@@ -324,6 +387,8 @@
   const gate     = document.getElementById('protocol-gate');
   const modelBar = document.getElementById('model-bar');
   const modelMsg = document.getElementById('model-msg');
+  const modelPct = document.getElementById('model-pct');
+  const bar      = document.querySelector('#model-progress i');
   const ctx      = canvas.getContext('2d');
 
   // ==========================================================================
@@ -391,6 +456,36 @@
   // 模型
   // ==========================================================================
 
+  const MB = 1048576;
+
+  /**
+   * 邊下載邊回報進度。
+   *
+   * Content-Length 在有些情況下拿不到（例如被 gzip 過的 chunked 回應），
+   * 這時就沒有分母可以算百分比——退回只顯示已下載量，不要假裝有進度。
+   */
+  async function fetchWithProgress(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}：${url}`);
+    const total = +res.headers.get('content-length') || 0;
+    if (!res.body) return new Uint8Array(await res.arrayBuffer());
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      onProgress(loaded, total);
+    }
+    const out = new Uint8Array(loaded);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+
   async function initModel() {
     if (location.protocol === 'file:') {
       gate.classList.add('show');
@@ -400,22 +495,69 @@
     }
     try {
       // 沒有 COOP/COEP 標頭就沒有 SharedArrayBuffer，多執行緒會直接失敗。
-      // npx serve 不會設那組標頭，所以固定單執行緒。
+      // npx serve 與 GitHub Pages 都不會設那組標頭，所以固定單執行緒。
       ort.env.wasm.numThreads = 1;
-      // 必須給絕對 URL：ORT 是相對於自己那支 script 的位置去解析 wasmPaths 的，
-      // 給 './vendor/' 會變成 /vendor/vendor/
-      ort.env.wasm.wasmPaths = new URL('./vendor/', location.href).href;
       ort.env.logLevel = 'error';
 
-      session = await ort.InferenceSession.create('./models/320n.onnx', {
+      // 首次載入要抓 22MB（runtime 11MB + 模型 12MB）。兩份都自己抓，
+      // 才有辦法把進度算在一起——交給 ORT 自己去 fetch 就沒有進度可回報。
+      const assets = [
+        { url: './vendor/ort-wasm-simd-threaded.wasm', label: '執行環境' },
+        { url: './models/320n.onnx', label: '偵測模型' },
+      ];
+      const got = new Array(assets.length).fill(0);
+      const size = new Array(assets.length).fill(0);
+      modelBar.classList.add('loading');
+
+      const paint = () => {
+        const done = got.reduce((a, b) => a + b, 0);
+        const all = size.reduce((a, b) => a + b, 0);
+        bar.style.width = all ? (done / all * 100).toFixed(1) + '%' : '0%';
+        modelPct.textContent = all
+          ? `${(done / MB).toFixed(1)} / ${(all / MB).toFixed(1)} MB`
+          : `${(done / MB).toFixed(1)} MB`;
+      };
+
+      // 先各發一個 HEAD 取得總大小，進度條才不會因為第二份還沒開始而先衝到 100%
+      await Promise.all(assets.map(async (a, i) => {
+        try {
+          const h = await fetch(a.url, { method: 'HEAD' });
+          size[i] = +h.headers.get('content-length') || 0;
+        } catch { /* 拿不到就算了，paint() 會退回只顯示已下載量 */ }
+      }));
+
+      modelMsg.textContent = '首次載入需下載約 ' +
+        (size.reduce((a, b) => a + b, 0) / MB).toFixed(0) + 'MB，之後會走快取…';
+
+      const bytes = [];
+      for (let i = 0; i < assets.length; i++) {
+        bytes[i] = await fetchWithProgress(assets[i].url, (loaded, total) => {
+          got[i] = loaded;
+          if (total && !size[i]) size[i] = total;
+          paint();
+        });
+        got[i] = bytes[i].length;
+        size[i] = bytes[i].length;
+        paint();
+      }
+
+      // 把抓好的 runtime 直接交給 ORT，它就不會再去 fetch 一次
+      ort.env.wasm.wasmBinary = bytes[0].buffer;
+      ort.env.wasm.wasmPaths = new URL('./vendor/', location.href).href;
+
+      modelMsg.textContent = '正在初始化…';
+      session = await ort.InferenceSession.create(bytes[1], {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
       });
+
       modelReady = true;
+      modelBar.classList.remove('loading');
       modelBar.classList.add('ready');
       modelMsg.textContent = '偵測模型已就緒（NudeNet 320n · 閾值 ' + SCORE_THRESHOLD + '）';
       if (items.length) runAll();
     } catch (err) {
+      modelBar.classList.remove('loading');
       modelBar.classList.add('fail');
       // 模型載入失敗絕對不能表現成「偵測到 0 個部位」——那會讓人以為圖片是安全的
       modelMsg.textContent = '模型載入失敗：' + (err && err.message ? err.message : err) +
