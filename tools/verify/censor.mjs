@@ -169,6 +169,92 @@ const run = async () => {
     check('可拖曳移動遮罩', moved.afterN === moved.beforeN && moved.changed,
       `框數 ${moved.beforeN} → ${moved.afterN}，畫面有變：${moved.changed}`);
 
+    // 拉把手縮放：框數不變，尺寸要真的變
+    const resize = await page.evaluate(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const canvas = document.getElementById('canvas');
+      const r = canvas.getBoundingClientRect();
+      const pt = (fx, fy) => ({ clientX: r.left + r.width * fx, clientY: r.top + r.height * fy,
+                                bubbles: true, pointerId: 1, pointerType: 'mouse' });
+      const fire = (t, o) => canvas.dispatchEvent(new PointerEvent(t, o));
+      const n = () => { const m = document.getElementById('detail').textContent.match(/^(\d+) 個遮罩/); return m ? +m[1] : 0; };
+      const area = () => +(document.getElementById('detail').textContent.match(/遮蓋 ([\d.]+)%/) || [0, 0])[1];
+
+      // 畫一個已知位置的方塊：畫布 20%~40%
+      fire('pointerdown', pt(0.20, 0.20)); fire('pointermove', pt(0.40, 0.40)); fire('pointerup', pt(0.40, 0.40));
+      await sleep(300);
+      const before = { n: n(), area: area() };
+
+      // 抓右下角把手（0.40, 0.40）往外拉到 0.60, 0.60 → 面積應該變大
+      fire('pointerdown', pt(0.40, 0.40)); fire('pointermove', pt(0.60, 0.60)); fire('pointerup', pt(0.60, 0.60));
+      await sleep(300);
+      const grown = { n: n(), area: area() };
+
+      // 再從右下角往回拉到 0.30, 0.30 → 面積應該變小
+      fire('pointerdown', pt(0.60, 0.60)); fire('pointermove', pt(0.30, 0.30)); fire('pointerup', pt(0.30, 0.30));
+      await sleep(300);
+      const shrunk = { n: n(), area: area() };
+
+      // 游標提示：停在把手上要變成縮放游標
+      fire('pointermove', pt(0.30, 0.30));
+      const cursor = canvas.style.cursor;
+
+      return { before, grown, shrunk, cursor };
+    });
+    check('拉把手可放大遮罩',
+      resize.grown.area > resize.before.area && resize.grown.n === resize.before.n,
+      `${resize.before.area}% → ${resize.grown.area}%`);
+    check('拉把手可縮小遮罩',
+      resize.shrunk.area < resize.grown.area && resize.shrunk.n === resize.before.n,
+      `${resize.grown.area}% → ${resize.shrunk.area}%`);
+    check('把手上顯示縮放游標', /resize$/.test(resize.cursor), resize.cursor || '(無)');
+
+    // 遮罩重疊時，選取框的外框與把手不能被後畫的方塊蓋掉。
+    // （曾經因為「填色與裝飾在同一趟畫」而被鄰框蓋住；命中判定不受繪製順序
+    //   影響，所以這個缺陷只能從畫面上驗。）
+    //
+    // 手法：讓 B 幾乎整個蓋住 A，只留左側一條縫可以點到 A。掃描 B 內部有沒有
+    // 選取色——繪製順序錯了就是 0，對了就有，不需要抓門檻。
+    const overlap = await page.evaluate(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const canvas = document.getElementById('canvas');
+      const cx = canvas.getContext('2d', { willReadFrequently: true });
+      // 每次都重抓 rect：render() 會重建清單、版面會位移，抓一次會讓座標全歪
+      const pt = (fx, fy) => {
+        const r = canvas.getBoundingClientRect();
+        return { clientX: r.left + r.width * fx, clientY: r.top + r.height * fy,
+                 bubbles: true, pointerId: 1, pointerType: 'mouse' };
+      };
+      const fire = (t, o) => canvas.dispatchEvent(new PointerEvent(t, o));
+
+      const n = () => { const m = document.getElementById('detail').textContent.match(/^(\d+) 個遮罩/); return m ? +m[1] : 0; };
+      const n0 = n();
+      fire('pointerdown', pt(0.55, 0.10)); fire('pointermove', pt(0.90, 0.40)); fire('pointerup', pt(0.90, 0.40));
+      await sleep(250);
+      // B 的起點必須在 A 外面往內拖——起點若落在 A 上，那一拖會變成「移動 A」
+      fire('pointerdown', pt(0.95, 0.45)); fire('pointermove', pt(0.60, 0.10)); fire('pointerup', pt(0.60, 0.10));
+      await sleep(250);
+      const made = n() - n0;
+      fire('pointerdown', pt(0.57, 0.25)); fire('pointerup', pt(0.57, 0.25));   // 只有 A 含這點
+      await sleep(250);
+
+      // 掃 B 內部：這塊已被 B 填黑，出現的選取紅只可能來自 A 的外框／把手
+      const x0 = Math.round(canvas.width * 0.62), x1 = Math.round(canvas.width * 0.93);
+      const y0 = Math.round(canvas.height * 0.12), y1 = Math.round(canvas.height * 0.42);
+      const d = cx.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+      let red = 0, white = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i] === 255 && d[i + 1] === 90 && d[i + 2] === 60) red++;
+        if (d[i] === 255 && d[i + 1] === 255 && d[i + 2] === 255) white++;
+      }
+      return { red, white, made };
+    });
+    // 前提沒成立的話這個測試是假通過，所以先驗前提
+    check('重疊情境成功建立兩個方塊', overlap.made === 2, `新增了 ${overlap.made} 個`);
+    check('重疊遮罩下外框與把手仍畫在最上層',
+      overlap.red > 0 && overlap.white > 0,
+      `被蓋住的區域內：選取色 ${overlap.red} px、把手白 ${overlap.white} px`);
+
     // ↑↓ 切換預覽
     const arrow = await page.evaluate(async () => {
       const sleep = ms => new Promise(r => setTimeout(r, ms));
