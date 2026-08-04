@@ -41,7 +41,8 @@
 1. 雙擊 `index.html`（**建議用 Safari 開**，見下方 HEIC 說明）
 2. 點選或拖入商品照，可一次多張
 3. 右側預覽會顯示合成結果；**點左邊清單的任一張**（或按 <kbd>↑</kbd><kbd>↓</kbd>）可切換預覽對象
-4. 按「打包下載 N 張（ZIP）」
+4. 想細看的時候：**滾輪／捏合縮放**、放大後**拖曳平移**、**雙擊**放大或還原，預覽下方也有 `−／百分比／＋`（百分比＝重設）。這只是檢視用，不會改到輸出；切換照片會保留目前的縮放，方便一張張比對同一個角落
+5. 按「打包下載 N 張（ZIP）」
 
 **多張**會打包成一個 ZIP：`money-sorry-20260729-2137.zip`。
 **單張**則直接給 JPG，不多包一層。
@@ -197,10 +198,13 @@ npm install                    # 第一次要裝 playwright
 npx playwright install chromium-headless-shell
 
 cd ../..
-node tools/verify/censor.mjs   # 預設吃 test/ 裡的圖
+node tools/verify/censor.mjs         # 遮罩工具；預設吃 test/ 裡的圖
+node tools/verify/preview-zoom.mjs   # 套框工具的預覽縮放／平移
 ```
 
-會檢查 `file://` 防呆、模型載入、批次偵測、三種警示、拖曳新增／刪除／切換保留、ZIP 輸出，並把結果存到 `tools/verify/out/`。
+`censor.mjs` 會檢查 `file://` 防呆、模型載入、批次偵測、三種警示、拖曳新增／刪除／切換保留、ZIP 輸出，並把結果存到 `tools/verify/out/`。
+
+`preview-zoom.mjs` 會檢查縮放上下限、滾輪的錨點、拖曳與邊界夾制、雙擊、捏合、切換照片時的視角，以及手機上「100% 能捲頁、放大後才吃掉手勢」；另外對輸出做 SHA-256 比對，確保縮放**不會**動到產出的 JPEG。
 
 **注意**：Playwright 驗得了「有沒有畫出方塊」，驗不了「遮的位置對不對」——那個必須人眼看，所以腳本最後會叫你去解開 ZIP 確認。
 
@@ -223,7 +227,8 @@ money-sorry/
 │       ├── sample-photo.webp     # 測試素材
 │       └── sample-output.jpeg    # 風格參考（非本工具輸出格式）
 ├── tools/verify/
-│   └── censor.mjs                # 遮罩工具的自動驗證
+│   ├── censor.mjs                # 遮罩工具的自動驗證
+│   └── preview-zoom.mjs          # 套框工具預覽縮放／平移的自動驗證
 └── openspec/                     # 規格與設計決策
     ├── specs/                    # 目前的主規格
     │   ├── photo-framing/
