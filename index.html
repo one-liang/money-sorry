@@ -167,19 +167,90 @@
       repeating-conic-gradient(#f4ecdd 0 25%, #fffdf8 0 50%) 50% / 22px 22px;
     display: grid;
     place-items: center;
+    /* 沒有可調空間時把手指留給整頁捲動；可調時才接管（見 .movable） */
+    touch-action: pan-y;
   }
-  #stage img { width: 100%; height: 100%; object-fit: contain; display: none; transition: opacity .12s; }
-  #stage.has img { display: block; }
-  #stage.busy img { opacity: .35; }
+  /* 這張照片有得調，手指就歸調整用——這時不該再捲頁 */
+  #stage.movable { touch-action: none; }
+  #stage.movable #pview { cursor: grab; }
+  #stage.movable.grabbing #pview { cursor: grabbing; }
+
+  /* 預覽疊兩層：下層是可以拖曳縮放的照片，上層是固定不動的外框 */
+  #pview {
+    position: absolute;
+    inset: 0;
+    display: none;
+    overflow: hidden;
+    background: #fff;             /* 去背 PNG 輸出時會鋪白底，預覽要一致 */
+    transition: opacity .12s;
+  }
+  #stage.has #pview { display: block; }
+  #stage.busy #pview { opacity: .35; }
+  #pview img {
+    position: absolute;
+    /* 沒擋掉的話，按住圖拖曳會變成瀏覽器原生的「拖圖片」，
+       pointer capture 被搶走，平移只會動第一格就停住 */
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  /* left/top/width/height 由 JS 換算成百分比寫入；基準是輸出的 1000×1000，
+     所以視窗大小改變不必重算 */
+  #pframe {
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;         /* 外框只是疊上去的，滑鼠要穿到下面的照片 */
+  }
   #stage .hint { color: var(--muted); font-size: var(--fs-body); text-align: center; padding: 0 24px; }
   #stage.has .hint { display: none; }
 
-  #pname {
+  /* ---- 構圖調整的控制列 ---- */
+  #zoombar {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  /* 有圖才出現；控制列在 #stage 外面，所以用相鄰選擇器接 .has */
+  #stage.has + #pbar #zoombar { display: flex; }
+  #zoombar .zb {
+    width: 26px; height: 26px;
+    padding: 0;
+    font: 600 15px/1 inherit;
+    color: var(--brown);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #zoombar .zb:hover:not(:disabled) { background: #fff2d8; }
+  #zoombar .zb:disabled { color: #cbbb9c; cursor: not-allowed; }
+  #zoombar .zb:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #zoombar .lvl {
+    width: auto;
+    min-width: 48px;
+    font: 600 var(--fs-meta)/1 inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  /* 檔名與控制列共用一排；控制列不做成疊在圖上的浮層，
+     不然它會蓋掉外框右下角的橫幅——那正是要盯著看的地方 */
+  #pbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-top: 8px;
-    min-height: 18px;
+    min-height: 30px;               /* 固定高度，沒選圖時這一排不會抖一下 */
+  }
+  #pname {
+    flex: 1;
+    min-width: 0;
     font-size: var(--fs-meta);
     color: var(--muted);
-    text-align: center;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
@@ -261,10 +332,20 @@
         <h2>預覽</h2>
         <div id="stage">
           <!-- 初始給 1x1 透明 GIF：空 src 在 file:// 下會讓瀏覽器嘗試載入頁面自身 -->
-          <img id="preview" alt="合成預覽" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+          <div id="pview">
+            <img id="pphoto" alt="商品照" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+            <img id="pframe" alt="外框" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+          </div>
           <div class="hint">尚未選擇照片</div>
         </div>
-        <div id="pname"></div>
+        <div id="pbar">
+          <div id="pname"></div>
+          <div id="zoombar">
+            <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片">−</button>
+            <button type="button" class="zb lvl" id="zlevel" title="回到自動裁切" aria-label="回到自動裁切">100%</button>
+            <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片">+</button>
+          </div>
+        </div>
         <button id="go" disabled>產出並下載</button>
         <div id="status"></div>
       </div>
@@ -279,6 +360,7 @@
       <li>來源照片短邊建議 ≥ 1000px，否則會被放大而略糊。</li>
       <li>照片若有<strong>左右</strong>或<strong>上下</strong>的純色留白邊（白／米色／淺灰），會自動去除後再放大填滿；<strong>四邊都是淺色底</strong>的棚拍照則原樣處理，不會被裁。</li>
       <li>點左邊清單的任一張（或用 <strong>↑↓</strong> 鍵）可切換右邊的預覽。</li>
+      <li>自動裁切只會置中，主體偏一邊或頂天構圖容易被切到。<strong>外框固定不動</strong>，可以直接<strong>拖曳</strong>框裡的照片調位置、用<strong>滾輪／捏合</strong>或控制列的 <strong>−／＋</strong> 放大縮小。調整會反映在輸出的圖上，每張各自記住；按中間的百分比（或雙擊）就回到自動裁切。</li>
       <li>多張會打包成<strong>一個 ZIP</strong> 下載（單張則直接給 JPG）。ZIP 內不壓縮——JPEG 本來就壓過了。</li>
       <li>iPhone 的 HEIC 檔請用 <strong>Safari</strong> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
@@ -299,34 +381,47 @@
   const drop    = document.getElementById('drop');
   const list    = document.getElementById('list');
   const stage   = document.getElementById('stage');
-  const preview = document.getElementById('preview');
+  const pphoto  = document.getElementById('pphoto');
+  const pframe  = document.getElementById('pframe');
   const go      = document.getElementById('go');
   const status  = document.getElementById('status');
   const pname   = document.getElementById('pname');
   const hint    = stage.querySelector('.hint');
+  const zin     = document.getElementById('zin');
+  const zout    = document.getElementById('zout');
+  const zlevel  = document.getElementById('zlevel');
 
+  /**
+   * @typedef {Object} Adjust  使用者對這張的構圖調整
+   * @property {number} z      額外放大倍率；1 = 自動裁切的結果
+   * @property {number} dx     位移，單位是輸出像素（1000×1000 那個座標系）
+   * @property {number} dy
+   */
   /**
    * @typedef {Object} Item
    * @property {File} file
    * @property {HTMLLIElement} li
    * @property {HTMLElement} badge
    * @property {HTMLElement} dim
-   * @property {string} thumbUrl
-   * @property {?{blob: Blob, trim: ?Object}} cache    合成結果，預覽與輸出共用
-   * @property {?string} previewUrl
+   * @property {string} thumbUrl                       清單縮圖與預覽共用同一個 object URL
+   * @property {?{w:number, h:number, content:Object}} measure  解碼後量到的尺寸與內容矩形
+   * @property {?Object} trim                          去白邊的結果，只拿來標在清單上
+   * @property {Adjust} adjust
+   * @property {boolean} moved                         有沒有被手動調整過
+   * @property {?{blob: Blob, trim: ?Object}} cache    合成結果；調整過就作廢
    */
   /** @type {Item[]} */
   let items = [];
   let selected = -1;
-  let previewToken = 0;   // 遞增序號：只有最後一次點擊的合成結果能寫進預覽
+  let previewToken = 0;   // 遞增序號：只有最後一次點擊的解碼結果能寫進預覽
   let busy = false;
 
   // ---- 外框：以 data URI 載入，不會污染 canvas（file:// 下讀本機檔案會） ----
+  // 預覽疊的那層與合成用的是同一個元素，1000×1000 的 RGBA 只解碼一次
   const frameReady = (async () => {
-    const img = new Image();
-    img.src = FRAME_DATA_URI;
-    await img.decode();
-    return img;
+    pframe.src = FRAME_DATA_URI;
+    await pframe.decode();
+    return pframe;
   })();
 
   // ==========================================================================
@@ -603,20 +698,65 @@
     return { x: 0, y: a, w: bmp.width, h, trim: { axis: 'y', a, b } };
   }
 
-  /**
-   * cover 置中裁切：在內容矩形內取最大的正方形。
-   * 回傳的是原始影像座標，已把去邊與 cover 併成同一個來源矩形，
-   * 所以只需要一次 drawImage，不經中間畫布重複取樣。
-   */
-  function coverRect(rect) {
-    const scale = Math.max(SIZE / rect.w, SIZE / rect.h);
-    const sw = SIZE / scale;
-    const sh = SIZE / scale;
-    return { sx: rect.x + (rect.w - sw) / 2, sy: rect.y + (rect.h - sh) / 2, sw, sh };
+  // ==========================================================================
+  // 裁切矩形
+  //
+  // 自動裁切只會置中，主體偏一邊或頂天構圖常常被切到，所以每張都帶一組
+  // 手動調整 {z, dx, dy}：外框不動，動的是框裡的照片。
+  //
+  // 預覽與輸出都只認 srcRect() 一個來源，看到什麼就輸出什麼。
+  // adjust 為 {z:1, dx:0, dy:0} 時它會退化成原本的置中 cover，
+  // 也就是沒動過的照片輸出與加這個功能之前逐位元相同。
+  // ==========================================================================
+
+  /** 內容矩形填滿 1000×1000 所需的倍率（cover） */
+  function fitScale(rect) {
+    return Math.max(SIZE / rect.w, SIZE / rect.h);
   }
 
-  /** 單張合成：解碼 → 去留白邊 → 裁切繪製 → 疊框 → JPEG Blob */
-  async function compose(file) {
+  /** 這個倍率下每一邊還推得動幾個輸出像素；0 = 這個軸已經沒有多餘的畫面可調 */
+  function panRange(rect, z) {
+    const f = fitScale(rect) * z;
+    return {
+      x: Math.max(0, (rect.w * f - SIZE) / 2),
+      y: Math.max(0, (rect.h * f - SIZE) / 2),
+    };
+  }
+
+  /**
+   * 套用調整後要取樣的來源矩形（原始影像座標）。
+   * 去邊、cover 與手動調整併成同一個矩形，所以只需要一次 drawImage，
+   * 不經中間畫布重複取樣。
+   * 順便回傳夾制過的位移與縮放倍率 f，預覽的版面計算要用。
+   */
+  function srcRect(rect, adj) {
+    const f = fitScale(rect) * adj.z;
+    const s = SIZE / f;
+    const r = panRange(rect, adj.z);
+    const dx = Math.min(r.x, Math.max(-r.x, adj.dx));
+    const dy = Math.min(r.y, Math.max(-r.y, adj.dy));
+    return {
+      sx: rect.x + (rect.w - s) / 2 - dx / f,
+      sy: rect.y + (rect.h - s) / 2 - dy / f,
+      sw: s, sh: s, f, dx, dy,
+    };
+  }
+
+  /** 解碼並量測；預覽只需要這一步，不必真的合成一張出來 */
+  async function measure(file) {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    try {
+      return { w: bmp.width, h: bmp.height, content: contentRect(bmp) };
+    } finally {
+      bmp.close();
+    }
+  }
+
+  /**
+   * 單張合成：解碼 → 去留白邊 → 依調整裁切繪製 → 疊框 → JPEG Blob
+   * @param {Object} [known] 已經量過的內容矩形，省一次掃描
+   */
+  async function compose(file, adj, known) {
     const frame = await frameReady;
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
     try {
@@ -629,8 +769,8 @@
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, SIZE, SIZE);
 
-      const content = contentRect(bmp);
-      const r = coverRect(content);
+      const content = known || contentRect(bmp);
+      const r = srcRect(content, adj);
       ctx.drawImage(bmp, r.sx, r.sy, r.sw, r.sh, 0, 0, SIZE, SIZE);
       ctx.drawImage(frame, 0, 0, SIZE, SIZE);
 
@@ -660,17 +800,15 @@
   }
 
   function clearItems() {
-    for (const it of items) {
-      URL.revokeObjectURL(it.thumbUrl);
-      if (it.previewUrl) URL.revokeObjectURL(it.previewUrl);
-    }
+    for (const it of items) URL.revokeObjectURL(it.thumbUrl);
     items = [];
     selected = -1;
-    previewToken++;                       // 讓還在飛的合成結果失效
+    previewToken++;                       // 讓還在飛的解碼結果失效
     list.innerHTML = '';
-    stage.classList.remove('has', 'busy');
+    stage.classList.remove('has', 'busy', 'movable', 'grabbing');
     hint.textContent = '尚未選擇照片';
     pname.textContent = '';
+    syncControls(null);
   }
 
   function render(files) {
@@ -707,16 +845,22 @@
       });
 
       list.appendChild(li);
-      items.push({ file, li, badge, dim, thumbUrl, cache: null, previewUrl: null });
+      items.push({
+        file, li, badge, dim, thumbUrl,
+        measure: null,
+        trim: null,
+        adjust: { z: 1, dx: 0, dy: 0 },
+        moved: false,
+        cache: null,
+      });
     }
   }
 
-  /** 把去邊結果寫回清單那一列，讓誤判用掃的就看得出來 */
-  function markTrim(item, trim) {
-    const kb = (item.file.size / 1024).toFixed(0) + ' KB';
-    item.dim.textContent = trim
-      ? kb + ' · 已去' + (trim.axis === 'x' ? '左右' : '上下') + '白邊'
-      : kb;
+  /** 把去邊與手動調整寫回清單那一列，誤判與動過的照片用掃的就看得出來 */
+  function markMeta(item) {
+    item.dim.textContent = (item.file.size / 1024).toFixed(0) + ' KB'
+      + (item.trim ? ' · 已去' + (item.trim.axis === 'x' ? '左右' : '上下') + '白邊' : '')
+      + (item.moved ? ' · 已手動調整' : '');
   }
 
   function mark(item, text, cls) {
@@ -724,14 +868,207 @@
     item.badge.className = 'badge' + (cls ? ' ' + cls : '');
   }
 
-  function showPreview(item) {
-    preview.src = item.previewUrl;
-    stage.classList.add('has');
-    pname.textContent = item.file.name;
+  // ==========================================================================
+  // 構圖調整的互動
+  //
+  // 外框固定，動的是框裡的照片。預覽不走 canvas：照片與外框疊成兩層，
+  // 拖曳時只改照片那層的 CSS 幾何，不必每一格都重新合成（大圖合成要 100~500ms，
+  // 根本拖不動）。幾何一律由 srcRect() 換算，跟輸出用的是同一份計算。
+  //
+  // 長度單位統一用「輸出像素」（1000×1000 的座標系），螢幕上量到的 CSS 像素
+  // 進來就換算掉，這樣舞台多寬都不影響調整結果。
+  // ==========================================================================
+
+  const ZOOM_MIN  = 1;      // 1 = 剛好填滿外框；再小就會露出白底
+  const ZOOM_MAX  = 8;
+  const ZOOM_STEP = 1.25;   // 按鈕每按一下的倍率
+  const WHEEL_K   = 0.0015; // 滾輪手感係數；用 exp 讓每一格的比例一致
+
+  let pan = null;                 // 單指／滑鼠拖曳中的起點
+  let pinch = null;               // 兩指捏合的起始狀態
+  const pointers = new Map();     // pointerId → client 座標；要兩點才算得出捏合
+
+  const clampZoom = v => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+
+  /** 目前正在預覽、而且已經量好的那一張；沒有就回 null */
+  function current() {
+    const item = selected >= 0 ? items[selected] : null;
+    return item && item.measure ? item : null;
+  }
+
+  /** 螢幕座標 → 以舞台中心為原點的輸出像素 */
+  function toOutput(cx, cy) {
+    const r = stage.getBoundingClientRect();
+    const k = SIZE / r.width;               // 舞台是正方形，一個比例就夠
+    return { x: (cx - r.left - r.width / 2) * k, y: (cy - r.top - r.height / 2) * k };
+  }
+
+  /** 控制列與游標樣式；item 為 null 代表現在沒有可調的照片 */
+  function syncControls(item) {
+    const z = item ? item.adjust.z : 1;
+    const range = item ? panRange(item.measure.content, z) : { x: 0, y: 0 };
+    zlevel.textContent = Math.round(z * 100) + '%';
+    zlevel.disabled = !item || !item.moved;
+    zout.disabled = !item || z <= ZOOM_MIN + 1e-3;
+    zin.disabled  = !item || z >= ZOOM_MAX - 1e-3;
+    // 半個輸出像素以下的空間拖了也看不出來，當作不能動
+    stage.classList.toggle('movable', !!item && (range.x > 0.5 || range.y > 0.5));
   }
 
   /**
-   * 切換預覽對象。合成是非同步的（大圖 100~500ms），連點多張時回應順序不保證，
+   * 把調整結果畫到預覽上。照片圖層擺的是「整張原圖」，多出來的部分
+   * 由 #pview 的 overflow 切掉，所以去白邊的那幾條也只是被切在外面。
+   * 用百分比寫入，換視窗大小不必重算。
+   */
+  function layout(item) {
+    const r = srcRect(item.measure.content, item.adjust);
+    item.adjust.dx = r.dx;                  // 夾回範圍內，下次拖曳才不會從界外開始
+    item.adjust.dy = r.dy;
+    const pct = v => (v / SIZE * 100) + '%';
+    pphoto.style.left   = pct(-r.sx * r.f);
+    pphoto.style.top    = pct(-r.sy * r.f);
+    pphoto.style.width  = pct(item.measure.w * r.f);
+    pphoto.style.height = pct(item.measure.h * r.f);
+  }
+
+  /** 調整動過之後：重畫預覽、作廢已合成的結果、在清單標記 */
+  function changed(item) {
+    layout(item);
+    const adj = item.adjust;
+    // 半個輸出像素以內當作沒動：手一抖的位移不該讓整列被標成「已調整」
+    item.moved = Math.abs(adj.z - 1) > 1e-3 || Math.abs(adj.dx) > 0.5 || Math.abs(adj.dy) > 0.5;
+    item.cache = null;
+    markMeta(item);
+    syncControls(item);
+  }
+
+  function reset(item) {
+    item.adjust = { z: 1, dx: 0, dy: 0 };
+    changed(item);
+  }
+
+  /**
+   * 縮放到 next，並讓 (ax, ay) 底下的那個影像點留在原地。
+   * 少了這個錨定，滾輪縮放會一直把想調的地方推出畫面外。
+   */
+  function zoomTo(item, next, ax, ay) {
+    const adj = item.adjust;
+    const z = clampZoom(next);
+    if (z === adj.z) return;
+    adj.dx = ax - (ax - adj.dx) * (z / adj.z);
+    adj.dy = ay - (ay - adj.dy) * (z / adj.z);
+    adj.z = z;
+    changed(item);
+  }
+
+  /** 捏合起點：兩指距離，以及中點壓在照片的哪個位置 */
+  function pinchStart(item) {
+    const [a, b] = [...pointers.values()];
+    const m = toOutput((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const adj = item.adjust;
+    return {
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      z: adj.z,
+      ux: (m.x - adj.dx) / adj.z,
+      uy: (m.y - adj.dy) / adj.z,
+    };
+  }
+
+  function startPan(item, cx, cy) {
+    if (!stage.classList.contains('movable')) return;
+    pan = { cx, cy, dx: item.adjust.dx, dy: item.adjust.dy };
+    stage.classList.add('grabbing');
+  }
+
+  zin.addEventListener('click', () => {
+    const it = current();
+    if (it) zoomTo(it, it.adjust.z * ZOOM_STEP, 0, 0);
+  });
+  zout.addEventListener('click', () => {
+    const it = current();
+    if (it) zoomTo(it, it.adjust.z / ZOOM_STEP, 0, 0);
+  });
+  zlevel.addEventListener('click', () => {
+    const it = current();
+    if (it) reset(it);
+  });
+
+  stage.addEventListener('wheel', ev => {
+    const it = current();
+    if (!it) return;
+    ev.preventDefault();                       // 不讓整頁跟著捲
+    // Firefox 在某些設定下以「行」為單位回報，換算成像素才不會一格就縮到底
+    const dy = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY;
+    const p = toOutput(ev.clientX, ev.clientY);
+    zoomTo(it, it.adjust.z * Math.exp(-dy * WHEEL_K), p.x, p.y);
+  }, { passive: false });
+
+  stage.addEventListener('pointerdown', ev => {
+    const it = current();
+    if (!it) return;
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    // 某些情況下（pointerId 已釋放）會拋錯，抓住就好，不影響拖曳本身
+    try { stage.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+
+    if (pointers.size === 2) {                        // 第二指進來就改判捏合
+      pan = null;
+      stage.classList.remove('grabbing');
+      pinch = pinchStart(it);
+    } else if (pointers.size === 1) {
+      startPan(it, ev.clientX, ev.clientY);
+    }
+  });
+
+  stage.addEventListener('pointermove', ev => {
+    const it = current();
+    if (!it || !pointers.has(ev.pointerId)) return;
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const m = toOutput((a.x + b.x) / 2, (a.y + b.y) / 2);
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      // 縮放與位移一起算：兩指中點原本壓著的那個點，縮放後仍壓在中點下
+      it.adjust.z  = clampZoom(pinch.z * d / pinch.dist);
+      it.adjust.dx = m.x - pinch.ux * it.adjust.z;
+      it.adjust.dy = m.y - pinch.uy * it.adjust.z;
+      changed(it);
+      return;
+    }
+
+    if (pan) {
+      const k = SIZE / stage.getBoundingClientRect().width;
+      it.adjust.dx = pan.dx + (ev.clientX - pan.cx) * k;
+      it.adjust.dy = pan.dy + (ev.clientY - pan.cy) * k;
+      changed(it);
+    }
+  });
+
+  ['pointerup', 'pointercancel'].forEach(type =>
+    stage.addEventListener(type, ev => {
+      if (!pointers.delete(ev.pointerId)) return;
+      try { stage.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) {
+        pan = null;
+        stage.classList.remove('grabbing');
+        return;
+      }
+      // 捏合放開一指：剩下的那指接手平移，不然圖會卡住
+      const it = current();
+      const [p] = [...pointers.values()];
+      if (it) startPan(it, p.x, p.y);
+    }));
+
+  stage.addEventListener('dblclick', () => {
+    const it = current();
+    if (it && it.moved) reset(it);
+  });
+
+  syncControls(null);
+
+  /**
+   * 切換預覽對象。量測要解碼原圖（大圖 100~500ms），連點多張時回應順序不保證，
    * 所以用 previewToken 把過期的結果丟掉，避免「點 C 卻顯示 B」。
    */
   async function select(i) {
@@ -743,26 +1080,34 @@
     item.li.classList.add('sel');
 
     const token = ++previewToken;
-
-    if (item.previewUrl) { stage.classList.remove('busy'); showPreview(item); return; }
-
     pname.textContent = item.file.name;
     if (stage.classList.contains('has')) stage.classList.add('busy');
 
     try {
-      const { blob, trim } = await compose(item.file);
-      if (token !== previewToken) return;          // 已被更晚的點擊取代
-      item.cache = { blob, trim };
-      item.previewUrl = URL.createObjectURL(blob);
-      markTrim(item, trim);
+      if (!item.measure) {
+        const m = await measure(item.file);
+        if (token !== previewToken) return;         // 已被更晚的點擊取代
+        item.measure = m;
+        item.trim = m.content.trim;
+        markMeta(item);
+      }
+      // 縮圖與預覽共用同一個 object URL，瀏覽器只會解碼一次；
+      // 等 decode 完才換版面，中途不會閃到「舊圖套新構圖」
+      pphoto.src = item.thumbUrl;
+      await pphoto.decode();
+      if (token !== previewToken) return;
+
       stage.classList.remove('busy');
-      showPreview(item);
+      stage.classList.add('has');
+      layout(item);
+      syncControls(item);
     } catch (err) {
       if (token !== previewToken) return;
       mark(item, reason(err, item.file), 'bad');
       stage.classList.remove('has', 'busy');
       hint.textContent = item.file.name + '：' + reason(err, item.file);
       pname.textContent = '';
+      syncControls(null);
     }
   }
 
@@ -825,10 +1170,12 @@
       setStatus('合成中 ' + (i + 1) + ' / ' + items.length + '…');
       mark(item, '合成中');
       try {
-        // 預覽過的那幾張直接用快取，不重算
-        const { blob, trim } = item.cache || await compose(item.file);
+        // 合成過又沒再動過的直接用快取，不重算
+        const { blob, trim } = item.cache
+          || await compose(item.file, item.adjust, item.measure && item.measure.content);
         item.cache = { blob, trim };
-        markTrim(item, trim);
+        item.trim = trim;
+        markMeta(item);
         const bytes = new Uint8Array(await blob.arrayBuffer());
         entries.push({ name: dedupe(outputName(item.file), used), bytes, blob });
         mark(item, '已合成', 'ok');
