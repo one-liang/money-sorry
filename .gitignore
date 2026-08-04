@@ -13,5 +13,17 @@ tools/verify/out/
 # test
 /test/
 
+# npx skills 安裝的第三方 skill：實體檔在 .agents/skills/，
+# .claude/skills/ 下對應的是 Windows junction（跨平台進版控會壞掉）。
+# skills-lock.json 刻意留在版控裡——`npx skills install` 就能還原這些 skill。
+.agents/
+.claude/skills/banner-design/
+.claude/skills/brand/
+.claude/skills/design/
+.claude/skills/design-system/
+.claude/skills/slides/
+.claude/skills/ui-styling/
+.claude/skills/ui-ux-pro-max/
+
 # 註：models/320n.onnx（約 12MB）刻意進版控——clone 下來就能用，
 # 不需要額外的下載步驟。vendor/ 的 onnxruntime-web 同理。
