@@ -5,7 +5,8 @@
   "description": "censor.html 與 index.html 的自動驗證；node_modules 不進版控，先跑 npm install",
   "scripts": {
     "censor": "node censor.mjs",
-    "preview-adjust": "node preview-adjust.mjs"
+    "preview-adjust": "node preview-adjust.mjs",
+    "studio": "node studio.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

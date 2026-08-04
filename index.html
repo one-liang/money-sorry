@@ -28,6 +28,10 @@
     --fs-action: 15.5px; /* 主要行動：選檔區標題、輸出按鈕 */
 
     --note:   #6b5433;   /* 說明文字色，比 ink 淡、比 muted 深 */
+
+    /* Lucide 圖示（https://lucide.dev/icons）。需要跟著文字變色的地方用 mask，
+       其餘直接內嵌 inline SVG（.ic），一律不使用外部請求。 */
+    --ic-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   body {
@@ -37,7 +41,7 @@
     color: var(--ink);
     font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
 
   /* ---- 兩個工具之間的導覽 ---- */
   nav.tabs {
@@ -65,6 +69,17 @@
     background: #fff;
     color: var(--brown);
     box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
+  /* Lucide 圖示（https://lucide.dev/icons）以 inline SVG 內嵌，跟著字色走 */
+  .ic {
+    width: 16px; height: 16px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -3px;
   }
 
   header { margin-bottom: 28px; }
@@ -217,6 +232,9 @@
   /* 有圖才出現；控制列在 #stage 外面，所以用相鄰選擇器接 .has */
   #stage.has + #pbar #zoombar { display: flex; }
   #zoombar .zb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 26px; height: 26px;
     padding: 0;
     font: 600 15px/1 inherit;
@@ -226,6 +244,7 @@
     border-radius: 6px;
     cursor: pointer;
   }
+  #zoombar .zb .ic { width: 15px; height: 15px; vertical-align: 0; }
   #zoombar .zb:hover:not(:disabled) { background: #fff2d8; }
   #zoombar .zb:disabled { color: #cbbb9c; cursor: not-allowed; }
   #zoombar .zb:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
@@ -293,8 +312,19 @@
     list-style: none;
   }
   .notes > summary::-webkit-details-marker { display: none; }
-  .notes > summary::before { content: '▸ '; }
-  .notes[open] > summary::before { content: '▾ '; }
+  /* Lucide chevron-right；用 mask 上色才會跟著 summary 的 hover 變色 */
+  .notes > summary::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 7px;
+    vertical-align: -2px;
+    background: currentColor;
+    -webkit-mask: var(--ic-chevron) center / 14px no-repeat;
+    mask: var(--ic-chevron) center / 14px no-repeat;
+    transition: transform .18s cubic-bezier(.2, .8, .2, 1);
+  }
+  .notes[open] > summary::before { transform: rotate(90deg); }
   .notes > summary:hover { color: var(--brown); }
   .notes ul { margin: 0; padding: 0 18px 14px 36px; }
   .notes li { font-size: var(--fs-body); color: var(--note); margin: 3px 0; }
@@ -304,13 +334,15 @@
 <div class="wrap">
 
   <nav class="tabs">
+    <a href="studio.html">遮罩＋套框</a>
     <a href="index.html" aria-current="page">賣場批次套框</a>
     <a href="censor.html">裸露遮罩</a>
   </nav>
 
   <header>
-    <h1>錢錢抱歉 <span>·</span> 賣場批次套框</h1>
-    <p class="sub">一次選多張商品照，裁切成 1000×1000 並套上外框，打包成 ZIP 下載。</p>
+    <h1>賣場批次套框</h1>
+    <p class="sub">一次選多張商品照，裁切成 1000×1000 並套上外框，打包成 ZIP 下載。<br>
+      要遮罩＋套框一起做，改用「<a href="studio.html">遮罩＋套框</a>」；這一頁維持零依賴、雙擊即用。</p>
   </header>
 
   <div class="grid">
@@ -341,9 +373,9 @@
         <div id="pbar">
           <div id="pname"></div>
           <div id="zoombar">
-            <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片">−</button>
+            <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
             <button type="button" class="zb lvl" id="zlevel" title="回到自動裁切" aria-label="回到自動裁切">100%</button>
-            <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片">+</button>
+            <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
           </div>
         </div>
         <button id="go" disabled>產出並下載</button>
@@ -360,7 +392,7 @@
       <li>來源照片短邊建議 ≥ 1000px，否則會被放大而略糊。</li>
       <li>照片若有<strong>左右</strong>或<strong>上下</strong>的純色留白邊（白／米色／淺灰），會自動去除後再放大填滿；<strong>四邊都是淺色底</strong>的棚拍照則原樣處理，不會被裁。</li>
       <li>點左邊清單的任一張（或用 <strong>↑↓</strong> 鍵）可切換右邊的預覽。</li>
-      <li>自動裁切只會置中，主體偏一邊或頂天構圖容易被切到。<strong>外框固定不動</strong>，可以直接<strong>拖曳</strong>框裡的照片調位置、用<strong>滾輪／捏合</strong>或控制列的 <strong>−／＋</strong> 放大縮小。調整會反映在輸出的圖上，每張各自記住；按中間的百分比（或雙擊）就回到自動裁切。</li>
+      <li>自動裁切只會置中，主體偏一邊或頂天構圖容易被切到。<strong>外框固定不動</strong>，可以直接<strong>拖曳</strong>框裡的照片調位置、用<strong>滾輪／捏合</strong>或控制列的<strong>放大鏡</strong>按鈕縮放。調整會反映在輸出的圖上，每張各自記住；按中間的百分比（或雙擊）就回到自動裁切。</li>
       <li>多張會打包成<strong>一個 ZIP</strong> 下載（單張則直接給 JPG）。ZIP 內不壓縮——JPEG 本來就壓過了。</li>
       <li>iPhone 的 HEIC 檔請用 <strong>Safari</strong> 開啟本頁，Chrome 無法解碼。</li>
     </ul>

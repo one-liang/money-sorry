@@ -27,6 +27,10 @@
     --fs-action: 15.5px; /* 主要行動：選檔區標題、輸出按鈕 */
 
     --note:   #6b5433;   /* 說明文字色，比 ink 淡、比 muted 深 */
+
+    /* Lucide 圖示（https://lucide.dev/icons）。需要跟著文字變色的地方用 mask，
+       其餘直接內嵌 inline SVG（.ic），一律不使用外部請求。 */
+    --ic-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   body {
@@ -36,7 +40,7 @@
     color: var(--ink);
     font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
 
   /* ---- 兩個工具之間的導覽 ---- */
   nav.tabs {
@@ -64,6 +68,17 @@
     background: #fff;
     color: var(--brown);
     box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
+  /* Lucide 圖示以 inline SVG 內嵌，跟著字色走 */
+  .ic {
+    width: 16px; height: 16px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -3px;
   }
 
   header { margin-bottom: 28px; }
@@ -310,8 +325,19 @@
     list-style: none;
   }
   .notes > summary::-webkit-details-marker { display: none; }
-  .notes > summary::before { content: '▸ '; }
-  .notes[open] > summary::before { content: '▾ '; }
+  /* Lucide chevron-right；用 mask 上色才會跟著 summary 的 hover 變色 */
+  .notes > summary::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 7px;
+    vertical-align: -2px;
+    background: currentColor;
+    -webkit-mask: var(--ic-chevron) center / 14px no-repeat;
+    mask: var(--ic-chevron) center / 14px no-repeat;
+    transition: transform .18s cubic-bezier(.2, .8, .2, 1);
+  }
+  .notes[open] > summary::before { transform: rotate(90deg); }
   .notes > summary:hover { color: var(--brown); }
   .notes ul { margin: 0; padding: 0 18px 14px 36px; }
   .notes li { font-size: var(--fs-body); color: var(--note); margin: 3px 0; }
@@ -321,13 +347,15 @@
 <div class="wrap">
 
   <nav class="tabs">
+    <a href="studio.html">遮罩＋套框</a>
     <a href="index.html">賣場批次套框</a>
     <a href="censor.html" aria-current="page">裸露遮罩</a>
   </nav>
 
   <header>
-    <h1>錢錢抱歉 <span>·</span> 裸露遮罩</h1>
-    <p class="sub">自動偵測公仔照的胸部、私處與臀部並疊上黑色方塊，可手動增減。</p>
+    <h1>裸露遮罩</h1>
+    <p class="sub">自動偵測公仔照的胸部、私處與臀部並疊上黑色方塊，可手動增減。<br>
+      遮完還要套框的話，改用「<a href="studio.html">遮罩＋套框</a>」一次做完，中間不必解壓縮再上傳一次。</p>
   </header>
 
   <div id="protocol-gate">
@@ -394,6 +422,7 @@
 </div>
 
 <script src="./vendor/ort.wasm.min.js"></script>
+<script src="./lib/zip.js"></script>
 <script>
 (() => {
   'use strict';
@@ -577,7 +606,7 @@
       modelReady = true;
       modelBar.classList.remove('loading');
       modelBar.classList.add('ready');
-      modelMsg.textContent = '偵測模型已就緒（NudeNet 320n · 閾值 ' + SCORE_THRESHOLD + '）';
+      modelMsg.textContent = '偵測模型已就緒';
       if (items.length) runAll();
     } catch (err) {
       modelBar.classList.remove('loading');
@@ -1213,126 +1242,17 @@
   });
 
   // ==========================================================================
-  // ZIP（store-only，手寫；與 index.html 同一套實作）
+  // ZIP 與下載：見 lib/zip.js
   //
-  // 為什麼要打包：Safari 會靜默丟棄間隔太短的連續程式化下載，被丟掉的那筆連
-  // Safari 自己的下載紀錄都不會登記，使用者完全收不到錯誤。打包成單一下載可以
-  // 徹底避開。這裡刻意複製一份而不抽成共用檔——抽出去 index.html 就失去
-  // 「單一檔案、雙擊即用」的性質，那是這個專案的賣點。
+  // 這一頁與 studio.html 都需要 http:// 協定（偵測模型），沒有「單一檔案可攜」
+  // 的包袱，所以共用同一份實作。index.html 刻意**不**引用 lib/——它必須維持
+  // 雙擊即用、可以單獨寄給別人的性質，那邊留著自己內嵌的一份。
   // ==========================================================================
 
-  const CRC_TABLE = (() => {
-    const t = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-      let c = n;
-      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      t[n] = c >>> 0;
-    }
-    return t;
-  })();
-
-  function crc32(bytes) {
-    let c = 0xFFFFFFFF;
-    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-    return (c ^ 0xFFFFFFFF) >>> 0;
-  }
-
-  function dosDateTime(d) {
-    return {
-      time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
-      date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
-    };
-  }
-
-  function makeZip(entries) {
-    const enc = new TextEncoder();
-    const { time, date } = dosDateTime(new Date());
-    const parts = [];
-    const central = [];
-    let offset = 0;
-
-    for (const e of entries) {
-      const nameBytes = enc.encode(e.name);
-      const crc = crc32(e.bytes);
-      const size = e.bytes.length;
-
-      const lh = new Uint8Array(30 + nameBytes.length);
-      const lv = new DataView(lh.buffer);
-      lv.setUint32(0, 0x04034b50, true);
-      lv.setUint16(4, 20, true);
-      lv.setUint16(6, 0x0800, true);    // flag bit 11：檔名為 UTF-8（中文檔名需要）
-      lv.setUint16(8, 0, true);         // method 0 = store
-      lv.setUint16(10, time, true);
-      lv.setUint16(12, date, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, size, true);
-      lv.setUint32(22, size, true);
-      lv.setUint16(26, nameBytes.length, true);
-      lv.setUint16(28, 0, true);
-      lh.set(nameBytes, 30);
-      parts.push(lh, e.bytes);
-
-      const ch = new Uint8Array(46 + nameBytes.length);
-      const cv = new DataView(ch.buffer);
-      cv.setUint32(0, 0x02014b50, true);
-      cv.setUint16(4, 20, true);
-      cv.setUint16(6, 20, true);
-      cv.setUint16(8, 0x0800, true);
-      cv.setUint16(10, 0, true);
-      cv.setUint16(12, time, true);
-      cv.setUint16(14, date, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, size, true);
-      cv.setUint32(24, size, true);
-      cv.setUint16(28, nameBytes.length, true);
-      cv.setUint16(30, 0, true);
-      cv.setUint16(32, 0, true);
-      cv.setUint16(34, 0, true);
-      cv.setUint16(36, 0, true);
-      cv.setUint32(38, 0, true);
-      cv.setUint32(42, offset, true);
-      ch.set(nameBytes, 46);
-      central.push(ch);
-
-      offset += lh.length + size;
-    }
-
-    const cdOffset = offset;
-    let cdSize = 0;
-    for (const c of central) { parts.push(c); cdSize += c.length; }
-
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 0x06054b50, true);
-    ev.setUint16(4, 0, true);
-    ev.setUint16(6, 0, true);
-    ev.setUint16(8, entries.length, true);
-    ev.setUint16(10, entries.length, true);
-    ev.setUint32(12, cdSize, true);
-    ev.setUint32(16, cdOffset, true);
-    ev.setUint16(20, 0, true);
-    parts.push(eocd);
-
-    return new Blob(parts, { type: 'application/zip' });
-  }
-
-  function dedupe(name, used) {
-    if (!used.has(name)) { used.add(name); return name; }
-    const dot = name.lastIndexOf('.');
-    const stem = dot < 0 ? name : name.slice(0, dot);
-    const ext  = dot < 0 ? ''   : name.slice(dot);
-    let i = 2;
-    while (used.has(stem + '-' + i + ext)) i++;
-    const out = stem + '-' + i + ext;
-    used.add(out);
-    return out;
-  }
+  const { makeZip, dedupe, download } = MS;
 
   function zipName() {
-    const d = new Date();
-    const p = n => String(n).padStart(2, '0');
-    return 'censored-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
-           '-' + p(d.getHours()) + p(d.getMinutes()) + '.zip';
+    return 'censored-' + MS.stamp() + '.zip';
   }
 
   function outName(src) {
@@ -1356,17 +1276,6 @@
     for (const b of it.boxes) outCtx.fillRect(b.x, b.y, b.w, b.h);
     bmp.close();
     return new Promise(res => outCanvas.toBlob(res, 'image/jpeg', QUALITY));
-  }
-
-  function download(blob, name) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
   go.addEventListener('click', async () => {

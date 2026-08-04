@@ -1,0 +1,2876 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>錢錢抱歉 · 遮罩＋套框</title>
+<style>
+  :root {
+    --brown:  #6b3906;
+    --brown2: #8a4c0c;
+    --amber:  #f8b72a;
+    --amber2: #ffd166;
+    --cream:  #fdf6e8;
+    --ink:    #3d2205;
+    --muted:  #9a7f5c;
+    --line:   #e6d7bd;
+    --ok:     #2f7d4f;
+    --bad:    #b3402c;
+    --warn:   #a9701b;
+    /* 字級：三頁共用同一套級距，不要再出現一次性的數字 */
+    --fs-h1:    26px;
+    --fs-label: 13px;
+    --fs-lead:  13.5px;
+    --fs-body:  13px;
+    --fs-meta:  12px;
+    --fs-badge: 11.5px;
+    --fs-action: 15.5px;
+
+    --note:   #6b5433;
+
+    /* Lucide 圖示（https://lucide.dev/icons）。需要跟著文字變色的地方用 mask，
+       其餘直接內嵌 inline SVG（.ic），一律不使用外部請求。 */
+    --ic-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--cream);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  /* ---- 三個工具之間的導覽 ---- */
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 22px;
+    padding: 5px;
+    background: #f6ecd9;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  nav.tabs a {
+    flex: 1;
+    padding: 9px 14px;
+    text-align: center;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: var(--fs-lead);
+    font-weight: 600;
+    color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  nav.tabs a:hover { color: var(--brown); background: #fffaf0; }
+  nav.tabs a[aria-current="page"] {
+    background: #fff;
+    color: var(--brown);
+    box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
+  /* Lucide 圖示以 inline SVG 內嵌，跟著字色走 */
+  .ic {
+    width: 16px; height: 16px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -3px;
+  }
+
+  header { margin-bottom: 28px; }
+  h1 {
+    margin: 0 0 6px;
+    font-size: var(--fs-h1);
+    letter-spacing: .02em;
+    color: var(--brown);
+  }
+  .sub { margin: 0; color: var(--muted); font-size: var(--fs-lead); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--fs-label);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .panel h2 .fill { flex: 1; }
+
+  /* ---- 需要 server 的告示 ---- */
+  #protocol-gate {
+    display: none;
+    margin-bottom: 22px;
+    padding: 18px 20px;
+    border: 1px solid #e8c9b8;
+    border-left: 3px solid var(--bad);
+    border-radius: 0 12px 12px 0;
+    background: #fff6f2;
+  }
+  #protocol-gate.show { display: block; }
+  #protocol-gate strong { color: var(--bad); display: block; margin-bottom: 6px; font-size: var(--fs-action); }
+  #protocol-gate p { margin: 6px 0; font-size: var(--fs-body); color: var(--note); }
+  #protocol-gate code {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: var(--fs-body)/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--brown);
+  }
+
+  /* ---- 模型載入狀態：延遲載入，開了遮罩才出現 ---- */
+  #model-bar {
+    display: none;
+    margin-bottom: 18px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+    font-size: var(--fs-body);
+    color: var(--muted);
+    align-items: center;
+    gap: 10px;
+  }
+  #model-bar.show { display: flex; }
+  #model-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
+  #model-bar.ready .dot { background: var(--ok); }
+  #model-bar.fail  .dot { background: var(--bad); }
+  #model-bar.fail  { color: var(--bad); }
+  #model-msg { flex: none; }
+  #model-progress {
+    flex: 1;
+    height: 6px;
+    min-width: 60px;
+    border-radius: 999px;
+    background: #f0e4cd;
+    overflow: hidden;
+    display: none;
+  }
+  #model-bar.loading #model-progress { display: block; }
+  #model-progress i {
+    display: block; height: 100%; width: 0;
+    border-radius: 999px; background: var(--amber);
+    transition: width .2s ease-out;
+  }
+  #model-pct { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); display: none; }
+  #model-bar.loading #model-pct { display: block; }
+
+  /* ---- drop zone ---- */
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: #fffdf8;
+  }
+  #drop:hover, #drop.hot { border-color: var(--amber); background: #fffaf0; }
+  #drop strong { display: block; font-size: var(--fs-action); color: var(--brown); margin-bottom: 4px; }
+  #drop small { color: var(--muted); font-size: var(--fs-meta); }
+  #drop.off { opacity: .45; cursor: not-allowed; }
+  #picker { display: none; }
+
+  /* ---- 清空：次要動作，刻意不與一鍵並排 ---- */
+  #clear {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #clear .ic { width: 13px; height: 13px; vertical-align: 0; }
+  #clear:hover:not(:disabled) { color: var(--bad); border-color: #e8c9b8; background: #fff6f2; }
+  /* 圖示走 currentColor（見 .ic），所以這裡只改 color，別另外指定給 .ic——
+     一旦兩邊分開設，hover 換了底色而圖示沒跟著換，就會變成白底白線消失掉 */
+  #clear.arm,
+  #clear.arm:hover:not(:disabled) { color: #fff; border-color: var(--bad); }
+  #clear.arm { background: var(--bad); }
+  #clear.arm:hover:not(:disabled) { background: #99361f; }
+  #clear:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* 確認狀態沒有逾時，一定要有明確的退出路徑 */
+  #clear-cancel {
+    flex: none;
+    margin-left: 6px;
+    padding: 4px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #clear-cancel:hover { color: var(--brown); background: #fffaf0; }
+  #clear-cancel:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #clear-cancel[hidden] { display: none; }
+
+  /* ---- 輸出命名 ---- */
+  /* 還沒選照片時，這幾塊都是空轉的控制項——藏起來，讓選檔區是唯一的動作 */
+  #naming[hidden], #bulk[hidden], #clear[hidden] { display: none; }
+
+  #naming { margin-top: 14px; }
+  #naming label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: var(--fs-meta);
+    color: var(--muted);
+  }
+  #oname {
+    width: 100%;
+    padding: 9px 12px;
+    font: var(--fs-lead)/1.4 inherit;
+    color: var(--ink);
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  #oname:focus { outline: 2px solid var(--amber); outline-offset: -1px; border-color: var(--amber); }
+
+  /* ---- 一鍵：計數 ＋ 分段點亮 ---- */
+  #bulk {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .bulkhead {
+    margin-bottom: 7px;
+    font-size: var(--fs-meta);
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+  .bulkrow { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+  .bulkrow + .bulkrow { margin-top: 8px; }
+  .bulkrow .lbl {
+    flex: none;
+    width: 40px;
+    font: 600 var(--fs-body)/1.5 inherit;
+    color: var(--brown);
+  }
+  /* 計數才是狀態的權威來源，等寬數字讓兩列的分數對齊 */
+  .bulkrow .count {
+    flex: 1;
+    font: var(--fs-meta)/1.5 inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .bulkrow .count b { color: var(--brown); font-weight: 700; }
+  .seg {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: #f6ecd9;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .seg button {
+    padding: 5px 13px;
+    font: 600 var(--fs-badge)/1.6 inherit;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .seg button:hover:not(:disabled) { color: var(--brown); background: #fff; }
+  .seg button:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .seg button:disabled { opacity: .4; cursor: not-allowed; }
+  /* 目前就是這個狀態。沿用導覽列與模式列的同一套「白底浮起」語彙 */
+  .seg button[data-state="lit"] {
+    color: var(--brown);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(107, 57, 6, .14);
+  }
+  /* 已經在目標狀態時不設 disabled（焦點會掉回 body），改用一次回彈表示
+     「有收到，但沒事可做」 */
+  @keyframes bulk-pulse {
+    from { box-shadow: 0 0 0 0 rgba(248, 183, 42, .85); }
+    to   { box-shadow: 0 0 0 7px rgba(248, 183, 42, 0); }
+  }
+  .seg button.pulse { animation: bulk-pulse .35s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .seg button.pulse { animation: none; } }
+
+  #nobox {
+    margin-top: 5px;
+    padding-left: 50px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    color: var(--bad);
+  }
+  #nobox[hidden] { display: none; }
+
+  /* ---- file list ---- */
+  #list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+  #list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffdf8;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  #list li:hover { border-color: var(--amber); background: #fffaf0; }
+  #list li.sel {
+    border-color: var(--amber);
+    background: #fff6e0;
+    box-shadow: inset 0 0 0 1px var(--amber);
+  }
+  #list li:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+
+  /* 拖曳中那一列浮起來，其餘用 FLIP 滑開，落點就是它現在停的位置 */
+  #list li.dragging {
+    position: relative;
+    z-index: 5;
+    border-color: var(--amber);
+    background: #fff;
+    box-shadow: 0 12px 26px rgba(107, 57, 6, .20), 0 2px 6px rgba(107, 57, 6, .10);
+    transition: none;
+  }
+  #list.sorting li { user-select: none; }
+  #list.sorting li:not(.dragging):hover { border-color: var(--line); background: #fffdf8; }
+
+  /* 序號與把手是兩件不同的東西：序號是唯讀讀數（決定 ZIP 內的編號），
+     把手才是控制項。合在同一個 <button> 裡會讓數字看起來可以按，
+     螢幕閱讀器也只念得到「拖曳排序」而吃掉數字。 */
+  /* 前導欄本身不上底色——共用底色會讓兩者又黏回一個區塊。
+     序號留在列的底色上（純文字），把手自己是一塊獨立的晶片。 */
+  .lead {
+    flex: none;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 52px;
+  }
+
+  .ord {
+    flex: none;
+    width: 26px;
+    text-align: right;
+    font: 700 18px/1.1 inherit;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+    color: var(--brown);
+    cursor: default;
+  }
+  .ord.none { color: #bda98a; font-weight: 600; font-size: 15px; }
+
+  .grip {
+    position: relative;
+    flex: none;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 30px;
+    padding: 0;
+    /* 靜態就有底色：觸控裝置沒有 hover，把手必須在靜止時就看得出是控制項 */
+    background: #f2e9d8;
+    border: none;
+    border-radius: 6px;
+    cursor: grab;
+    touch-action: none;
+    transition: background .12s;
+  }
+  /* 視覺是一塊 22×30 的小晶片，但命中區用 ::before 撐到約 32×60，
+     面積仍超過 44×44 的下限。
+     touch-action: none 只留在這裡——整條前導欄都設的話，手機從清單
+     左緣往上滑會完全捲不動。 */
+  .grip::before { content: ''; position: absolute; inset: -15px -6px -15px -4px; }
+  .grip:hover { background: var(--amber2); }
+  .grip:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  li.sel .grip { background: #f7e2b4; }
+  li.dragging .grip { cursor: grabbing; background: var(--amber); }
+  .grip .ic { width: 15px; height: 15px; color: #9c8258; stroke-width: 2.6; }
+  .grip:hover .ic, li.dragging .grip .ic { color: var(--brown); }
+
+  #list img.thumb {
+    width: 48px; height: 48px;
+    object-fit: cover;
+    border-radius: 7px;
+    background: var(--line);
+    flex: none;
+  }
+  #list .meta { min-width: 0; flex: 1; }
+  #list .name {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: var(--fs-lead);
+  }
+  #list .dim { color: var(--muted); font-size: var(--fs-meta); }
+  #list .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  #list .badge {
+    font-size: var(--fs-badge); padding: 2px 8px; border-radius: 999px;
+    background: #f2ead9; color: var(--muted); white-space: nowrap;
+  }
+  #list .badge.ok   { background: #e4f2e9; color: var(--ok); }
+  #list .badge.bad  { background: #f8e5e1; color: var(--bad); }
+  #list .badge.warn { background: #fdf0da; color: var(--warn); }
+
+  /* 開關晶片：亮＝開、暗＝關 */
+  .chips { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 62px;
+    padding: 4px 10px;
+    font: 600 var(--fs-badge)/1.5 inherit;
+    color: #b6a389;
+    background: #f4eddf;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .chip .ic { width: 13px; height: 13px; stroke-width: 2.2; }
+  .chip:hover { border-color: var(--line); }
+  .chip:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .chip.on { color: var(--brown); background: var(--amber2); border-color: var(--amber); }
+  .chip.censor.on { color: #fff; background: #4a4a4a; border-color: #2e2e2e; }
+
+  /* ---- preview ---- */
+  #modes {
+    display: none;
+    gap: 2px;
+    margin-bottom: 10px;
+    padding: 3px;
+    background: #f6ecd9;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  #modes.show { display: flex; }
+  #modes button {
+    flex: 1;
+    padding: 6px 10px;
+    font: 600 var(--fs-body)/1.4 inherit;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #modes button[aria-pressed="true"] {
+    color: var(--brown);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
+  }
+
+  #stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: repeating-conic-gradient(#f4ecdd 0 25%, #fffdf8 0 50%) 50% / 22px 22px;
+    display: grid;
+    place-items: center;
+    touch-action: pan-y;
+  }
+  #stage.movable { touch-action: none; }
+  #stage.movable #pview { cursor: grab; }
+  #stage.movable.grabbing #pview { cursor: grabbing; }
+  /* 編輯遮罩模式：手指歸編輯用，且游標是十字 */
+  #stage.censoring { touch-action: none; }
+  #stage.censoring #pview { cursor: crosshair; }
+
+  /* 三層：可平移縮放的照片 / 跟著照片走的遮罩 / 固定不動的外框 */
+  #pview {
+    position: absolute;
+    inset: 0;
+    display: none;
+    overflow: hidden;
+    background: #fff;
+    transition: opacity .12s;
+  }
+  #stage.has #pview { display: block; }
+  #stage.busy #pview { opacity: .35; }
+  #pphoto, #pboxes {
+    position: absolute;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  #pboxes { pointer-events: none; }
+  #pframe {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    transition: opacity .12s;
+  }
+  /* 編輯遮罩時外框淡出——它擋住的正是要確認的區域 */
+  #stage.censoring #pframe { opacity: .12; }
+  #stage.noframe #pframe { display: none; }
+
+  /* 編輯遮罩時標出哪些區域會被套框裁掉 */
+  #cropline {
+    position: absolute;
+    display: none;
+    border: 2px dashed var(--amber);
+    box-shadow: 0 0 0 9999px rgba(61, 34, 5, .28);
+    pointer-events: none;
+  }
+  #stage.censoring.willcrop #cropline { display: block; }
+
+  #stage .hint { color: var(--muted); font-size: var(--fs-body); text-align: center; padding: 0 24px; }
+  #stage.has .hint { display: none; }
+
+  #zoombar {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  #zoombar.show { display: flex; }
+  #zoombar .zb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    padding: 0;
+    font: 600 15px/1 inherit;
+    color: var(--brown);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #zoombar .zb .ic { width: 15px; height: 15px; vertical-align: 0; }
+  #zoombar .zb:hover:not(:disabled) { background: #fff2d8; }
+  #zoombar .zb:disabled { color: #cbbb9c; cursor: not-allowed; }
+  #zoombar .zb:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #zoombar .lvl {
+    width: auto; min-width: 48px;
+    font: 600 var(--fs-meta)/1 inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  #pbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    min-height: 30px;
+  }
+  #pname {
+    flex: 1; min-width: 0;
+    font-size: var(--fs-meta);
+    color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #detail {
+    margin-top: 4px;
+    min-height: 17px;
+    font-size: var(--fs-meta);
+    color: var(--muted);
+    text-align: center;
+  }
+  #detail .w { color: var(--warn); font-weight: 600; }
+
+  .editnote {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: #fffaf0;
+    border: 1px solid var(--line);
+    font-size: var(--fs-body);
+    color: var(--note);
+    line-height: 1.7;
+  }
+  .editnote b { color: var(--brown); font-weight: 600; }
+  .editnote[hidden] { display: none; }
+
+  #go {
+    margin-top: 16px;
+    width: 100%;
+    padding: 14px 18px;
+    font: 600 var(--fs-action)/1 inherit;
+    color: var(--brown);
+    background: var(--amber);
+    border: none;
+    border-bottom: 3px solid #d9970f;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: filter .12s, transform .06s;
+  }
+  #go:hover:not(:disabled) { filter: brightness(1.05); }
+  #go:active:not(:disabled) { transform: translateY(1px); border-bottom-width: 2px; }
+  #go:disabled { background: #ece2cf; color: #b6a389; border-bottom-color: #ddd0b8; cursor: not-allowed; }
+
+  #statusbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+    min-height: 20px;
+    font-size: var(--fs-body);
+    color: var(--muted);
+    text-align: center;
+  }
+  #status.done { color: var(--ok); font-weight: 600; }
+  #status.err  { color: var(--bad); }
+
+  /* 復原只掛在「遮罩全關」上——那是四顆一鍵裡唯一可能造成漏遮的 */
+  #undo {
+    flex: none;
+    padding: 3px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    color: var(--brown);
+    background: var(--amber2);
+    border: 1px solid var(--amber);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #undo:hover { filter: brightness(1.04); }
+  #undo:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #undo[hidden] { display: none; }
+
+  .notes { margin: 22px 0 0; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
+  .notes > summary {
+    padding: 11px 18px;
+    cursor: pointer;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--muted);
+    list-style: none;
+  }
+  .notes > summary::-webkit-details-marker { display: none; }
+  .notes > summary::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 7px;
+    vertical-align: -2px;
+    background: currentColor;
+    -webkit-mask: var(--ic-chevron) center / 14px no-repeat;
+    mask: var(--ic-chevron) center / 14px no-repeat;
+    transition: transform .18s cubic-bezier(.2,.8,.2,1);
+  }
+  .notes[open] > summary::before { transform: rotate(90deg); }
+  .notes > summary:hover { color: var(--brown); }
+  .notes ul { margin: 0; padding: 0 18px 14px 36px; }
+  .notes li { font-size: var(--fs-body); color: var(--note); margin: 3px 0; }
+  .notes table { margin: 4px 18px 14px 36px; border-collapse: collapse; font-size: var(--fs-body); color: var(--note); }
+  .notes th, .notes td { padding: 4px 12px 4px 0; text-align: left; }
+  .notes th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="tabs">
+    <a href="studio.html" aria-current="page">遮罩＋套框</a>
+    <a href="index.html">賣場批次套框</a>
+    <a href="censor.html">裸露遮罩</a>
+  </nav>
+
+  <header>
+    <h1>遮罩＋套框</h1>
+    <p class="sub">一次選好照片，逐張決定要不要遮、要不要套框，一次打包下載。順序由程式保證，JPEG 只編一次。</p>
+  </header>
+
+  <div id="protocol-gate">
+    <strong>這個頁面沒辦法用雙擊開啟</strong>
+    <p>偵測模型有 12MB，瀏覽器在 <code>file://</code> 下會把每個本機檔案當成獨立來源，擋掉模型與外框的載入。請改用本機 server：</p>
+    <p>在專案資料夾執行 <code>serve.cmd</code>，或手動跑 <code>npx serve .</code>，然後開 <code>http://localhost:3000/studio.html</code>。</p>
+    <p style="color:var(--muted)">只想套框而且不想開 server 的話，<code>index.html</code> 仍然可以直接雙擊使用。</p>
+  </div>
+
+  <div id="model-bar">
+    <span class="dot"></span>
+    <span id="model-msg">正在載入偵測模型…</span>
+    <span id="model-progress"><i></i></span>
+    <span id="model-pct"></span>
+  </div>
+
+  <div class="grid">
+
+    <div>
+      <div class="panel">
+        <h2><span>選擇照片</span><span class="fill"></span>
+          <button type="button" id="clear" disabled>
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span id="clear-text">清空</span>
+          </button>
+          <button type="button" id="clear-cancel" hidden>取消</button>
+        </h2>
+
+        <div id="drop">
+          <strong>點此選擇照片，或直接拖進來</strong>
+          <small>可一次選多張 · 會加在清單後面 · 支援 JPG / PNG / WebP</small>
+        </div>
+        <input id="picker" type="file" accept="image/*" multiple>
+
+        <div id="naming">
+          <label for="oname">輸出命名（留白就沿用原檔名）</label>
+          <input id="oname" type="text" placeholder="例如：錢錢抱歉" autocomplete="off" spellcheck="false">
+        </div>
+
+        <!-- 計數是狀態的權威來源；點亮的那一段只是視覺冗餘。
+             aria-live 讓一鍵、逐張晶片、追加檔案造成的變動都會被念出來。 -->
+        <div id="bulk" aria-live="polite">
+          <div class="bulkhead">整批套用</div>
+
+          <div class="bulkrow" role="group" aria-labelledby="lbl-frame">
+            <span class="lbl" id="lbl-frame">套框</span>
+            <span class="count" id="frame-count">—</span>
+            <span class="seg">
+              <button type="button" id="frame-on" disabled>全開</button>
+              <button type="button" id="frame-off" disabled>全關</button>
+            </span>
+          </div>
+
+          <div class="bulkrow" role="group" aria-labelledby="lbl-censor">
+            <span class="lbl" id="lbl-censor">遮罩</span>
+            <span class="count" id="censor-count">—</span>
+            <span class="seg">
+              <button type="button" id="censor-on" disabled>全開</button>
+              <button type="button" id="censor-off" disabled>全關</button>
+            </span>
+          </div>
+
+          <!-- 「開了遮罩但一個部位都沒抓到」＝實際上沒遮。這句話必須常駐，
+               放進 #status 會被後續的「輸出中 N / M…」蓋掉，下載前就看不到了 -->
+          <div id="nobox" hidden></div>
+        </div>
+
+        <!-- 每個 li 都是 role="option"，容器沒有 listbox 的話那是孤兒角色 -->
+        <ul id="list" role="listbox" aria-label="照片清單"></ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>預覽與調整</h2>
+
+        <div id="modes">
+          <button type="button" id="mode-censor" aria-pressed="true">編輯遮罩</button>
+          <button type="button" id="mode-frame" aria-pressed="false">調整構圖</button>
+        </div>
+
+        <div id="stage">
+          <div id="pview">
+            <!-- 初始給 1x1 透明 GIF：空 src 會讓瀏覽器嘗試載入頁面自身 -->
+            <img id="pphoto" alt="商品照" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+            <canvas id="pboxes"></canvas>
+            <img id="pframe" alt="外框" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+            <div id="cropline"></div>
+          </div>
+          <div class="hint">尚未選擇照片</div>
+        </div>
+
+        <div id="pbar">
+          <div id="pname"></div>
+          <div id="zoombar">
+            <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
+            <button type="button" class="zb lvl" id="zlevel" title="回到自動裁切" aria-label="回到自動裁切">100%</button>
+            <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
+          </div>
+        </div>
+        <div id="detail"></div>
+
+        <div class="editnote" id="note-censor" hidden>
+          <b>在圖上拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · <b>拉邊角的白點</b>調整大小 · 選取後按 <b>Delete</b> 刪除<br>
+          虛線黃框是<b>推算</b>的遮罩，位置不對就刪掉。畫面外的暗區<b>會被套框裁掉</b>，但落在那裡的部位仍要遮——構圖隨時可能再拉遠
+        </div>
+        <div class="editnote" id="note-frame" hidden>
+          <b>外框固定不動</b>，拖曳框裡的照片調位置 · <b>滾輪／捏合</b>縮放 · <b>雙擊</b>回到自動裁切<br>
+          這個模式看到的就是輸出。<span id="note-frame-censor" hidden>遮罩在這裡是<b>唯讀</b>的，要改請切回「編輯遮罩」</span>
+        </div>
+
+        <button id="go" disabled>選擇照片</button>
+        <!-- aria-live：漏遮警告、失敗訊息與復原提示都走這裡，不能只有視覺 -->
+        <div id="statusbar" aria-live="polite">
+          <span id="status"></span>
+          <button type="button" id="undo" hidden>復原</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <details class="notes">
+    <summary>使用說明與注意事項</summary>
+
+    <ul>
+      <li>每張照片有<b>套框</b>與<b>遮罩</b>兩個開關，可以逐張決定。四種組合的輸出：</li>
+    </ul>
+    <table>
+      <tr><th>套框</th><th>遮罩</th><th>輸出</th></tr>
+      <tr><td>關</td><td>關</td><td>原始檔案原樣轉存，副檔名跟著原圖（不重新編碼）</td></tr>
+      <tr><td>關</td><td>開</td><td>原尺寸 ＋ 黑色遮罩</td></tr>
+      <tr><td>開</td><td>關</td><td>1000×1000 ＋ 外框</td></tr>
+      <tr><td>開</td><td>開</td><td>1000×1000 ＋ 黑色遮罩 ＋ 外框</td></tr>
+    </table>
+
+    <ul>
+      <li>兩個都開時，預覽有<b>兩個模式</b>：「編輯遮罩」看完整原圖，「調整構圖」看實際輸出。遮罩一定要在<b>完整原圖</b>下確認——只在裁切後的畫面裡看過就把構圖拉遠，原本在畫面外沒遮到的部位會跑進輸出。</li>
+      <li>一鍵區的<b>計數就是目前狀態</b>：全部開會點亮「全開」、全部關會點亮「全關」、混合則兩段都不亮。「含遮罩」只算<b>真的會畫上遮罩</b>的——開了開關卻一個部位都沒抓到的那張不算，並會另外標示出來。</li>
+      <li>要留意遮罩的<b>「全關」</b>——它一次撤掉整批的遮罩。按下後狀態列會出現<b>「復原」</b>，復原只是把開關寫回去，已偵測的框都還在，不會重跑偵測。<b>下載按鈕也一直寫著含遮罩的張數</b>，按下之前請看一眼。</li>
+      <li><b>輸出命名</b>留白就沿用原檔名；填了之後 ZIP、資料夾與每個檔案都用這個名字，檔案依清單順序編號。ZIP 一律開一層資料夾。</li>
+      <li>每一列最左邊的<b>數字就是輸出順序</b>；數字右邊的<b>六點把手</b>可以上下拖曳排序，序號會即時跟著跳。把手聚焦後按 <kbd>↑</kbd><kbd>↓</kbd> 也能移動。</li>
+      <li>再次選檔是<b>加在後面</b>，不會清掉已經調好的東西。要重來請用右上角的「清空」——它會先要你確認，不會自己逾時，按 <kbd>Esc</kbd> 或「取消」都能退出。</li>
+      <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
+      <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
+      <li>照片全程在瀏覽器內處理，不會上傳到任何地方。</li>
+      <li>iPhone 的 HEIC 檔請用 <b>Safari</b> 開啟本頁，Chrome 無法解碼。</li>
+    </ul>
+  </details>
+
+</div>
+
+<script src="./lib/zip.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ==========================================================================
+  // 這一頁是 index.html（套框）與 censor.html（遮罩）的整合版。
+  //
+  // 兩者的耦合點只有一條：遮罩座標在**原圖**空間，套框把圖裁縮成 1000×1000。
+  // 所以順序必須先遮後套——在這裡由 compose() 的繪製順序保證，不再靠人記。
+  //
+  // 既有兩頁都原封不動保留。本頁只在 lib/ 這一層與 censor.html 共用實作；
+  // index.html 刻意不共用，它必須維持雙擊即用、可以單獨寄給別人的性質。
+  // ==========================================================================
+
+  const SIZE     = 1000;              // 套框輸出邊長
+  const QUALITY  = 0.92;
+  const SUFFIX   = '-money-sorry';    // 未命名時的統一後綴（三種處理過的組合共用）
+  const FRAME_SRC = './assets/frame.png';
+
+  const { makeZip, dedupe, download } = MS;
+
+  const picker   = document.getElementById('picker');
+  const drop     = document.getElementById('drop');
+  const list     = document.getElementById('list');
+  const clearBtn = document.getElementById('clear');
+  const oname    = document.getElementById('oname');
+  const clearText= document.getElementById('clear-text');
+  const cancelBtn= document.getElementById('clear-cancel');
+  const bulkBtns = {
+    frameOn:  document.getElementById('frame-on'),
+    frameOff: document.getElementById('frame-off'),
+    censorOn: document.getElementById('censor-on'),
+    censorOff:document.getElementById('censor-off'),
+  };
+  const bulkCount = {
+    frameOn:  document.getElementById('frame-count'),
+    censorOn: document.getElementById('censor-count'),
+  };
+  const namingEl = document.getElementById('naming');
+  const bulkEl   = document.getElementById('bulk');
+  const noboxEl  = document.getElementById('nobox');
+  const undoBtn  = document.getElementById('undo');
+  const modes    = document.getElementById('modes');
+  const modeC    = document.getElementById('mode-censor');
+  const modeF    = document.getElementById('mode-frame');
+  const stage    = document.getElementById('stage');
+  const pview    = document.getElementById('pview');
+  const pphoto   = document.getElementById('pphoto');
+  const pboxes   = document.getElementById('pboxes');
+  const pframe   = document.getElementById('pframe');
+  const cropline = document.getElementById('cropline');
+  const hint     = stage.querySelector('.hint');
+  const pname    = document.getElementById('pname');
+  const detail   = document.getElementById('detail');
+  const zoombar  = document.getElementById('zoombar');
+  const zin      = document.getElementById('zin');
+  const zout     = document.getElementById('zout');
+  const zlevel   = document.getElementById('zlevel');
+  const noteC    = document.getElementById('note-censor');
+  const noteF    = document.getElementById('note-frame');
+  const noteFC   = document.getElementById('note-frame-censor');
+  const go       = document.getElementById('go');
+  const statusEl = document.getElementById('status');
+  const gate     = document.getElementById('protocol-gate');
+  const modelBar = document.getElementById('model-bar');
+  const modelMsg = document.getElementById('model-msg');
+  const modelPct = document.getElementById('model-pct');
+  const modelBarI= document.querySelector('#model-progress i');
+  const bctx     = pboxes.getContext('2d');
+
+  /**
+   * @typedef {Object} Item
+   * @property {File} file
+   * @property {string} thumbUrl
+   * @property {boolean} frameOn                       套框開關；預設開
+   * @property {boolean} censorOn                      遮罩開關；預設關（模型延遲載入）
+   * @property {'pending'|'ready'|'error'} status      解碼狀態
+   * @property {string} error
+   * @property {?{w:number,h:number,content:Object}} measure
+   * @property {{z:number,dx:number,dy:number}} adjust 構圖調整；1/0/0 ＝ 自動裁切
+   * @property {boolean} moved
+   * @property {Array} boxes                           遮罩框，原圖座標
+   * @property {'idle'|'busy'|'done'|'error'} detect
+   * @property {number} areaPct
+   * @property {boolean} inferRejected                 刪過推算框就不再長回來
+   * @property {boolean} dup
+   * @property {'censor'|'frame'} mode                 兩個都開時使用者選的模式
+   * @property {?{blob:Blob, ext:string}} cache
+   */
+  /** @type {Item[]} */
+  let items = [];
+  let selected = -1;
+  let previewToken = 0;
+  let busy = false;
+  const fileOk = location.protocol !== 'file:';
+
+  // ==========================================================================
+  // 外框
+  //
+  // 這一頁走 http://，同源的 <img> 繪入 canvas 不會 taint，所以直接讀
+  // assets/frame.png 就好，不必像 index.html 那樣內嵌 41KB 的 base64。
+  // （index.html 必須內嵌，因為它要能在 file:// 下用。）
+  // ==========================================================================
+
+  const frameReady = (async () => {
+    if (!fileOk) throw new Error('file:// 下無法載入外框');
+    pframe.src = FRAME_SRC;
+    await pframe.decode();
+    return pframe;
+  })();
+  frameReady.catch(() => { /* 由 gate 負責說明，這裡只避免 unhandled rejection */ });
+
+  // ==========================================================================
+  // 去白邊掃描（與 index.html 同一套判定，數值不可改動）
+  // ==========================================================================
+
+  const SCAN_MAX   = 512;
+  const BG_LUMA    = 215;
+  const BG_TOL     = 12;
+  const MARGIN_MIN = 0.03;
+  const SCAN_SLACK = 2;
+
+  function scanCanvas(bmp) {
+    const k = Math.min(1, SCAN_MAX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k));
+    const h = Math.max(1, Math.round(bmp.height * k));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, w, h);
+    return { data: ctx.getImageData(0, 0, w, h).data, w, h, kx: w / bmp.width, ky: h / bmp.height };
+  }
+
+  function medianPatch(scan, x0, y0) {
+    const ch = [[], [], []];
+    for (let y = y0; y < y0 + 5; y++) {
+      for (let x = x0; x < x0 + 5; x++) {
+        const o = (y * scan.w + x) * 4;
+        ch[0].push(scan.data[o]);
+        ch[1].push(scan.data[o + 1]);
+        ch[2].push(scan.data[o + 2]);
+      }
+    }
+    return ch.map(v => v.sort((a, b) => a - b)[v.length >> 1]);
+  }
+
+  function sampleCorners(scan) {
+    if (scan.w < 5 || scan.h < 5) return null;
+    return [
+      medianPatch(scan, 0, 0),
+      medianPatch(scan, scan.w - 5, 0),
+      medianPatch(scan, 0, scan.h - 5),
+      medianPatch(scan, scan.w - 5, scan.h - 5),
+    ];
+  }
+
+  function bgColorOf(corners) {
+    if (!corners) return null;
+    for (const c of corners) {
+      if (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < BG_LUMA) return null;
+    }
+    for (let ch = 0; ch < 3; ch++) {
+      let lo = 255, hi = 0;
+      for (const c of corners) {
+        if (c[ch] < lo) lo = c[ch];
+        if (c[ch] > hi) hi = c[ch];
+      }
+      if (hi - lo > BG_TOL) return null;
+    }
+    return [0, 1, 2].map(ch => Math.round(corners.reduce((s, c) => s + c[ch], 0) / corners.length));
+  }
+
+  function scanMargins(scan, bg) {
+    const { data, w, h } = scan;
+    const isBg = o =>
+      data[o + 3] < 8 ||
+      (Math.abs(data[o]     - bg[0]) <= BG_TOL &&
+       Math.abs(data[o + 1] - bg[1]) <= BG_TOL &&
+       Math.abs(data[o + 2] - bg[2]) <= BG_TOL);
+    const colBg = x => { for (let y = 0; y < h; y++) if (!isBg((y * w + x) * 4)) return false; return true; };
+    const rowBg = y => { for (let x = 0; x < w; x++) if (!isBg((y * w + x) * 4)) return false; return true; };
+
+    let l = 0;
+    while (l < w && colBg(l)) l++;
+    if (l === w) return null;
+    let r = w - 1;
+    while (r > l && colBg(r)) r--;
+    let t = 0;
+    while (t < h && rowBg(t)) t++;
+    let b = h - 1;
+    while (b > t && rowBg(b)) b--;
+
+    return { l, r: w - 1 - r, t, b: h - 1 - b };
+  }
+
+  function contentRect(bmp) {
+    const none = { x: 0, y: 0, w: bmp.width, h: bmp.height, trim: null };
+
+    let scan;
+    try {
+      scan = scanCanvas(bmp);
+    } catch (err) {
+      return none;
+    }
+
+    const bg = bgColorOf(sampleCorners(scan));
+    if (!bg) return none;
+    const m = scanMargins(scan, bg);
+    if (!m) return none;
+
+    const bigL = m.l / scan.w >= MARGIN_MIN;
+    const bigR = m.r / scan.w >= MARGIN_MIN;
+    const bigT = m.t / scan.h >= MARGIN_MIN;
+    const bigB = m.b / scan.h >= MARGIN_MIN;
+    const trimX = bigL && bigR && !bigT && !bigB;
+    const trimY = bigT && bigB && !bigL && !bigR;
+    if (!trimX && !trimY) return none;
+
+    const back = (v, k) => Math.max(0, Math.round((v - SCAN_SLACK) / k));
+
+    if (trimX) {
+      const a = back(m.l, scan.kx);
+      const b = back(m.r, scan.kx);
+      const w = bmp.width - a - b;
+      if (w <= 0 || (!a && !b)) return none;
+      return { x: a, y: 0, w, h: bmp.height, trim: { axis: 'x', a, b } };
+    }
+    const a = back(m.t, scan.ky);
+    const b = back(m.b, scan.ky);
+    const h = bmp.height - a - b;
+    if (h <= 0 || (!a && !b)) return none;
+    return { x: 0, y: a, w: bmp.width, h, trim: { axis: 'y', a, b } };
+  }
+
+  // ==========================================================================
+  // 裁切矩形（與 index.html 同一套計算）
+  // ==========================================================================
+
+  function fitScale(rect) {
+    return Math.max(SIZE / rect.w, SIZE / rect.h);
+  }
+
+  function panRange(rect, z) {
+    const f = fitScale(rect) * z;
+    return {
+      x: Math.max(0, (rect.w * f - SIZE) / 2),
+      y: Math.max(0, (rect.h * f - SIZE) / 2),
+    };
+  }
+
+  function srcRect(rect, adj) {
+    const f = fitScale(rect) * adj.z;
+    const s = SIZE / f;
+    const r = panRange(rect, adj.z);
+    const dx = Math.min(r.x, Math.max(-r.x, adj.dx));
+    const dy = Math.min(r.y, Math.max(-r.y, adj.dy));
+    return {
+      sx: rect.x + (rect.w - s) / 2 - dx / f,
+      sy: rect.y + (rect.h - s) / 2 - dy / f,
+      sw: s, sh: s, f, dx, dy,
+    };
+  }
+
+  async function loadBitmap(file) {
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (err) {
+      if (/heic|heif/i.test(file.type) || /\.heic$/i.test(file.name)) {
+        throw new Error('此瀏覽器無法解碼 HEIC，請改用 Safari');
+      }
+      if (!file.type.startsWith('image/')) throw new Error('不是圖片檔');
+      throw new Error('無法解碼（' + (err && err.name ? err.name : '未知錯誤') + '）');
+    }
+  }
+
+  // ==========================================================================
+  // 偵測（與 censor.html 同一套參數與流程）
+  // ==========================================================================
+
+  const SCORE_THRESHOLD = 0.15;
+  const NMS_IOU         = 0.45;
+  const BOX_PAD         = 0.13;
+  const RESOLUTIONS     = [320, 640];
+  const AREA_WARN       = 0.35;
+  const BOX_MAX_AREA    = 0.55;
+
+  const LABELS = [
+    'FEMALE_GENITALIA_COVERED', 'FACE_FEMALE', 'BUTTOCKS_EXPOSED',
+    'FEMALE_BREAST_EXPOSED', 'FEMALE_GENITALIA_EXPOSED', 'MALE_BREAST_EXPOSED',
+    'ANUS_EXPOSED', 'FEET_EXPOSED', 'BELLY_COVERED', 'FEET_COVERED',
+    'ARMPITS_COVERED', 'ARMPITS_EXPOSED', 'FACE_MALE', 'BELLY_EXPOSED',
+    'MALE_GENITALIA_EXPOSED', 'ANUS_COVERED', 'FEMALE_BREAST_COVERED',
+    'BUTTOCKS_COVERED',
+  ];
+
+  const TARGET = new Set([
+    'FEMALE_BREAST_EXPOSED', 'FEMALE_BREAST_COVERED',
+    'FEMALE_GENITALIA_EXPOSED', 'FEMALE_GENITALIA_COVERED',
+    'BUTTOCKS_EXPOSED', 'BUTTOCKS_COVERED',
+    'ANUS_EXPOSED', 'ANUS_COVERED',
+    'MALE_GENITALIA_EXPOSED',
+  ]);
+
+  function partOf(cls) {
+    if (cls.includes('BREAST'))    return 'BREAST';
+    if (cls.includes('GENITALIA')) return 'GENITALIA';
+    if (cls.includes('BUTTOCKS'))  return 'BUTTOCKS';
+    if (cls.includes('ANUS'))      return 'ANUS';
+    return 'OTHER';
+  }
+
+  let session = null;
+  let modelReady = false;
+  let modelPromise = null;
+
+  const MB = 1048576;
+
+  async function fetchWithProgress(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}：${url}`);
+    const total = +res.headers.get('content-length') || 0;
+    if (!res.body) return new Uint8Array(await res.arrayBuffer());
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      onProgress(loaded, total);
+    }
+    const out = new Uint8Array(loaded);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+
+  /** 連 ort 的 JS glue 都延遲載入——只套框的批次不該下載任何一個位元組 */
+  function loadOrtScript() {
+    return new Promise((res, rej) => {
+      if (window.ort) { res(); return; }
+      const s = document.createElement('script');
+      s.src = './vendor/ort.wasm.min.js';
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('無法載入 vendor/ort.wasm.min.js'));
+      document.head.append(s);
+    });
+  }
+
+  /** 第一次有人打開遮罩開關才會走到這裡 */
+  function ensureModel() {
+    if (modelPromise) return modelPromise;
+    modelPromise = (async () => {
+      modelBar.classList.add('show');
+      if (!fileOk) {
+        modelBar.classList.add('fail');
+        modelMsg.textContent = '未載入：此頁需要以本機 server 開啟';
+        throw new Error('file://');
+      }
+      try {
+        modelMsg.textContent = '正在載入偵測模型…';
+        await loadOrtScript();
+
+        // 沒有 COOP/COEP 就沒有 SharedArrayBuffer，多執行緒會直接失敗。
+        // npx serve 與 GitHub Pages 都不設那組標頭，所以固定單執行緒。
+        ort.env.wasm.numThreads = 1;
+        ort.env.logLevel = 'error';
+
+        const assets = [
+          { url: './vendor/ort-wasm-simd-threaded.wasm' },
+          { url: './models/320n.onnx' },
+        ];
+        const got  = new Array(assets.length).fill(0);
+        const size = new Array(assets.length).fill(0);
+        modelBar.classList.add('loading');
+
+        const paint = () => {
+          const done = got.reduce((a, b) => a + b, 0);
+          const all  = size.reduce((a, b) => a + b, 0);
+          modelBarI.style.width = all ? (done / all * 100).toFixed(1) + '%' : '0%';
+          modelPct.textContent = all
+            ? `${(done / MB).toFixed(1)} / ${(all / MB).toFixed(1)} MB`
+            : `${(done / MB).toFixed(1)} MB`;
+        };
+
+        await Promise.all(assets.map(async (a, i) => {
+          try {
+            const h = await fetch(a.url, { method: 'HEAD' });
+            size[i] = +h.headers.get('content-length') || 0;
+          } catch { /* 拿不到就算了，paint() 會退回只顯示已下載量 */ }
+        }));
+
+        modelMsg.textContent = '首次載入需下載約 ' +
+          (size.reduce((a, b) => a + b, 0) / MB).toFixed(0) + 'MB，之後會走快取…';
+
+        const bytes = [];
+        for (let i = 0; i < assets.length; i++) {
+          bytes[i] = await fetchWithProgress(assets[i].url, (loaded, total) => {
+            got[i] = loaded;
+            if (total && !size[i]) size[i] = total;
+            paint();
+          });
+          got[i] = bytes[i].length;
+          size[i] = bytes[i].length;
+          paint();
+        }
+
+        ort.env.wasm.wasmBinary = bytes[0].buffer;
+        ort.env.wasm.wasmPaths = new URL('./vendor/', location.href).href;
+
+        modelMsg.textContent = '正在初始化…';
+        session = await ort.InferenceSession.create(bytes[1], {
+          executionProviders: ['wasm'],
+          graphOptimizationLevel: 'all',
+        });
+
+        modelReady = true;
+        modelBar.classList.remove('loading');
+        modelBar.classList.add('ready');
+        modelMsg.textContent = '偵測模型已就緒';
+      } catch (err) {
+        modelBar.classList.remove('loading');
+        modelBar.classList.add('fail');
+        // 模型載入失敗絕對不能表現成「偵測到 0 個部位」——那會讓人以為圖片是安全的。
+        // 所以連同所有遮罩開關一起退回關閉，讓狀態誠實。
+        modelMsg.textContent = '模型載入失敗：' + (err && err.message ? err.message : err) +
+                               '　（遮罩開關已全部退回關閉）';
+        for (const it of items) it.censorOn = false;
+        render();
+        syncPreview();
+        updateGo();
+        throw err;
+      }
+    })();
+    return modelPromise;
+  }
+
+  const padCanvas = document.createElement('canvas');
+  const padCtx    = padCanvas.getContext('2d', { willReadFrequently: true });
+
+  function preprocess(bmp, res) {
+    const maxSize = Math.max(bmp.width, bmp.height);
+    padCanvas.width = res;
+    padCanvas.height = res;
+    padCtx.fillStyle = '#000';
+    padCtx.fillRect(0, 0, res, res);
+    const k = res / maxSize;
+    padCtx.drawImage(bmp, 0, 0, bmp.width * k, bmp.height * k);
+
+    const { data } = padCtx.getImageData(0, 0, res, res);
+    const n = res * res;
+    const f = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) {
+      f[i]         = data[i * 4]     / 255;
+      f[i + n]     = data[i * 4 + 1] / 255;
+      f[i + n * 2] = data[i * 4 + 2] / 255;
+    }
+    return { tensor: new ort.Tensor('float32', f, [1, 3, res, res]), maxSize };
+  }
+
+  function iou(a, b) {
+    const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h);
+    if (x2 <= x1 || y2 <= y1) return 0;
+    const inter = (x2 - x1) * (y2 - y1);
+    return inter / (a.w * a.h + b.w * b.h - inter);
+  }
+
+  async function detectOnce(bmp, res) {
+    const { tensor, maxSize } = preprocess(bmp, res);
+    const out = await session.run({ images: tensor });
+    const o = out[session.outputNames[0]];
+    const [, ch, num] = o.dims;
+    const d = o.data;
+    const scale = maxSize / res;
+    const found = [];
+
+    for (let i = 0; i < num; i++) {
+      let best = 0, bestId = -1;
+      for (let c = 4; c < ch; c++) {
+        const s = d[c * num + i];
+        if (s > best) { best = s; bestId = c - 4; }
+      }
+      if (best < SCORE_THRESHOLD) continue;
+      const cls = LABELS[bestId];
+      if (!TARGET.has(cls)) continue;
+
+      const cx = d[i], cy = d[num + i], bw = d[2 * num + i], bh = d[3 * num + i];
+      let x = (cx - bw / 2) * scale;
+      let y = (cy - bh / 2) * scale;
+      let w = bw * scale;
+      let h = bh * scale;
+
+      x = Math.max(0, Math.min(x, bmp.width));
+      y = Math.max(0, Math.min(y, bmp.height));
+      w = Math.min(w, bmp.width - x);
+      h = Math.min(h, bmp.height - y);
+      if (w <= 1 || h <= 1) continue;
+
+      found.push({ x, y, w, h, cls, score: best, part: partOf(cls) });
+    }
+    return found;
+  }
+
+  /** NMS 保留最高分的框；不能取外接矩形，那會讓框在多輪合併中越滾越大 */
+  function mergeBoxes(all) {
+    const keep = [];
+    for (const d of all.sort((a, b) => b.score - a.score)) {
+      let dup = false;
+      for (const k of keep) {
+        if (k.part === d.part && iou(d, k) > NMS_IOU) { dup = true; break; }
+      }
+      if (!dup) keep.push(d);
+    }
+    return keep;
+  }
+
+  /** 補模型的能力缺口：胸部有遮、下體沒遮是最常見的漏遮，降閾值也救不回來 */
+  function inferCrotch(boxes, imgW, imgH) {
+    const breasts = boxes.filter(b => b.part === 'BREAST');
+    const hasCrotch = boxes.some(b => b.part === 'GENITALIA');
+    if (breasts.length !== 2 || hasCrotch) return null;
+
+    const [a, b] = breasts;
+    const cxA = a.x + a.w / 2, cyA = a.y + a.h / 2;
+    const cxB = b.x + b.w / 2, cyB = b.y + b.h / 2;
+    const midX = (cxA + cxB) / 2;
+    const midY = (cyA + cyB) / 2;
+
+    const span = Math.hypot(cxA - cxB, cyA - cyB);
+    const chest = Math.max(span, (a.w + b.w) / 2);
+    const down = chest * 1.7;
+
+    const w = chest * 0.95;
+    const h = chest * 0.95;
+    const x = midX - w / 2;
+    const y = midY + down - h / 2;
+
+    if (y > imgH || y + h < 0) return null;
+
+    const cx = Math.max(0, Math.min(x, imgW - 1));
+    const cy = Math.max(0, Math.min(y, imgH - 1));
+    return {
+      x: cx, y: cy,
+      w: Math.min(w, imgW - cx),
+      h: Math.min(h, imgH - cy),
+      cls: 'FEMALE_GENITALIA_INFERRED',
+      score: 0,
+      part: 'GENITALIA',
+      inferred: true,
+    };
+  }
+
+  function padBox(b, imgW, imgH) {
+    const px = b.w * BOX_PAD, py = b.h * BOX_PAD;
+    const x1 = Math.max(0, b.x - px), y1 = Math.max(0, b.y - py);
+    const x2 = Math.min(imgW, b.x + b.w + px), y2 = Math.min(imgH, b.y + b.h + py);
+    return { ...b, x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
+
+  async function detect(bmp, rejectInferred) {
+    const all = [];
+    for (const res of RESOLUTIONS) {
+      const r = await detectOnce(bmp, res);
+      all.push(...r);
+    }
+    const boxes = mergeBoxes(all).map(b => padBox(b, bmp.width, bmp.height));
+
+    if (!rejectInferred) {
+      const inferred = inferCrotch(boxes, bmp.width, bmp.height);
+      if (inferred) boxes.push(inferred);
+    }
+
+    for (const b of boxes) {
+      b.suspect = (b.w * b.h) / (bmp.width * bmp.height) > BOX_MAX_AREA;
+    }
+    return boxes;
+  }
+
+  // ==========================================================================
+  // 遮罩面積
+  //
+  // 分母是**實際會輸出的可見區域**，不是原圖。套框啟用後畫面被裁掉一塊，
+  // 沿用原圖面積會把佔比算低，警示往「太寬鬆」的方向失準。
+  // 框會重疊，直接相加會高估，所以用低解析度網格點算聯集。
+  // ==========================================================================
+
+  function maskedRatio(item) {
+    const boxes = item.boxes;
+    if (!boxes.length || !item.measure) return 0;
+    let x0 = 0, y0 = 0, rw = item.measure.w, rh = item.measure.h;
+    if (item.frameOn) {
+      const r = srcRect(item.measure.content, item.adjust);
+      x0 = r.sx; y0 = r.sy; rw = r.sw; rh = r.sh;
+    }
+    const N = 160;
+    const gw = rw / N, gh = rh / N;
+    let hit = 0;
+    for (let gy = 0; gy < N; gy++) {
+      const py = y0 + (gy + 0.5) * gh;
+      for (let gx = 0; gx < N; gx++) {
+        const px = x0 + (gx + 0.5) * gw;
+        for (const b of boxes) {
+          if (px >= b.x && px < b.x + b.w && py >= b.y && py < b.y + b.h) { hit++; break; }
+        }
+      }
+    }
+    return hit / (N * N);
+  }
+
+  // ==========================================================================
+  // 合成
+  //
+  // 四種組合走同一個函式。關鍵在遮罩框的座標換算——它與照片裁切共用
+  // srcRect() 的同一組參數，所以遮罩永遠貼在原本那個部位上。
+  //
+  // 繪製順序：白底 → 照片 → 遮罩 → 外框。遮罩在外框之前，也就是邏輯上
+  // 「先遮後套」，只是不必真的產生中間那張圖，全程只編一次 JPEG。
+  // ==========================================================================
+
+  const outCanvas = document.createElement('canvas');
+
+  async function compose(item) {
+    const bmp = await loadBitmap(item.file);
+    try {
+      const ctx = outCanvas.getContext('2d');
+
+      if (item.frameOn) {
+        const frame = await frameReady;
+        outCanvas.width = outCanvas.height = SIZE;
+        ctx.imageSmoothingQuality = 'high';
+
+        // 透明來源（去背 PNG）轉 JPEG 會變黑，先鋪白底
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+
+        const content = item.measure ? item.measure.content : contentRect(bmp);
+        const r = srcRect(content, item.adjust);
+        ctx.drawImage(bmp, r.sx, r.sy, r.sw, r.sh, 0, 0, SIZE, SIZE);
+
+        if (item.censorOn) {
+          ctx.fillStyle = '#000';
+          for (const b of item.boxes) {
+            ctx.fillRect((b.x - r.sx) * r.f, (b.y - r.sy) * r.f, b.w * r.f, b.h * r.f);
+          }
+        }
+        ctx.drawImage(frame, 0, 0, SIZE, SIZE);
+      } else {
+        // 只遮罩：維持原尺寸，與 censor.html 逐位元相同
+        outCanvas.width = bmp.width;
+        outCanvas.height = bmp.height;
+        ctx.drawImage(bmp, 0, 0);
+        ctx.fillStyle = '#000';
+        for (const b of item.boxes) ctx.fillRect(b.x, b.y, b.w, b.h);
+      }
+
+      const blob = await new Promise(res => outCanvas.toBlob(res, 'image/jpeg', QUALITY));
+      if (!blob) throw new Error('toBlob 失敗');
+      return blob;
+    } finally {
+      bmp.close();
+    }
+  }
+
+  // ==========================================================================
+  // 輸出命名
+  // ==========================================================================
+
+  /** 去掉會在 ZIP 裡造出詭異路徑的字元；空白、連字號與中文一律保留 */
+  const BAD_NAME = new RegExp('[\\\\/:*?"<>|\\x00-\\x1f]', 'g');
+  function sanitize(s) {
+    return s.replace(BAD_NAME, '').replace(/^[\s.]+|[\s.]+$/g, '');
+  }
+
+  const extOf = n => { const d = n.lastIndexOf('.'); return d < 0 ? '' : n.slice(d); };
+  const stemOf = n => { const d = n.lastIndexOf('.'); return d < 0 ? n : n.slice(0, d); };
+
+  /** 這張會不會被重新編碼；兩個開關都關就是原檔轉存 */
+  const processed = it => it.frameOn || it.censorOn;
+  const outputtable = it => it.status === 'ready';
+
+  /**
+   * 依目前清單順序算出每一筆的輸出名。
+   * 失敗的檔案不佔序號——留洞會讓人以為漏抓了檔案。
+   */
+  function plan() {
+    const ready = items.filter(outputtable);
+    const base = sanitize(oname.value);
+    const pad = String(ready.length).length;
+    const folder = base || ('money-sorry-' + MS.stamp());
+    const used = new Set();
+    const entries = ready.map((it, i) => {
+      const ext = processed(it) ? '.jpg' : (extOf(it.file.name) || '.jpg');
+      const raw = base
+        ? base + '-' + String(i + 1).padStart(pad, '0') + ext
+        : stemOf(it.file.name) + (processed(it) ? SUFFIX : '') + ext;
+      return { item: it, name: dedupe(raw, used), n: i + 1 };
+    });
+    return { base, folder, entries };
+  }
+
+  // ==========================================================================
+  // 預覽
+  //
+  // 三層疊起來：照片、遮罩、外框。照片與遮罩層共用同一組幾何，所以遮罩
+  // 永遠貼在照片上；外框固定不動。
+  //
+  // 兩個模式看到的東西不一樣，不只是手勢不同：
+  //   編輯遮罩  完整原圖 ＋ 虛線裁切範圍。必須在這裡確認，因為只在裁切後的
+  //             視野裡看過，之後把構圖拉遠就會露出原本在畫面外、沒遮到的部位。
+  //   調整構圖  1000×1000 的實際輸出，遮罩唯讀。
+  // ==========================================================================
+
+  const BOX_CANVAS_MAX = 1400;   // 遮罩圖層的內部解析度上限；4000px 的畫布沒必要
+  const HANDLE_PX = 9;
+  const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+  const CURSORS = {
+    nw: 'nwse-resize', se: 'nwse-resize',
+    ne: 'nesw-resize', sw: 'nesw-resize',
+    n: 'ns-resize', s: 'ns-resize',
+    w: 'ew-resize', e: 'ew-resize',
+  };
+
+  let selectedBox = null;
+  let boxScale = 1;               // 遮罩畫布內部座標 / 原圖座標
+
+  function current() {
+    const item = selected >= 0 ? items[selected] : null;
+    return item && item.measure ? item : null;
+  }
+
+  /** 這張現在實際在哪個模式；兩個開關的狀態決定有哪些模式可選 */
+  function effMode(item) {
+    if (!item) return 'plain';
+    if (item.censorOn && item.frameOn) return item.mode;
+    if (item.censorOn) return 'censor';
+    if (item.frameOn) return 'frame';
+    return 'plain';
+  }
+
+  function syncControls(item) {
+    const m = effMode(item);
+    const canZoom = item && m === 'frame';
+    const z = item ? item.adjust.z : 1;
+    const range = canZoom ? panRange(item.measure.content, z) : { x: 0, y: 0 };
+    zoombar.classList.toggle('show', !!canZoom);
+    zlevel.textContent = Math.round(z * 100) + '%';
+    zlevel.disabled = !canZoom || !item.moved;
+    zout.disabled = !canZoom || z <= ZOOM_MIN + 1e-3;
+    zin.disabled  = !canZoom || z >= ZOOM_MAX - 1e-3;
+    stage.classList.toggle('movable', !!canZoom && (range.x > 0.5 || range.y > 0.5));
+  }
+
+  /**
+   * 把幾何寫進照片層與遮罩層。兩層永遠拿同一組數字，遮罩才不會跟照片脫節。
+   *   frame 模式  舞台是 1000×1000 的輸出視窗，照片依 srcRect 擺放
+   *   其他模式    舞台就是整張原圖，照片鋪滿
+   */
+  function layout(item) {
+    const m = effMode(item);
+    const iw = item.measure.w, ih = item.measure.h;
+
+    if (m === 'frame') {
+      const r = srcRect(item.measure.content, item.adjust);
+      item.adjust.dx = r.dx;
+      item.adjust.dy = r.dy;
+      const pct = v => (v / SIZE * 100) + '%';
+      const geo = {
+        left: pct(-r.sx * r.f), top: pct(-r.sy * r.f),
+        width: pct(iw * r.f), height: pct(ih * r.f),
+      };
+      stage.style.aspectRatio = '1';
+      Object.assign(pphoto.style, geo);
+      Object.assign(pboxes.style, geo);
+      cropline.style.display = 'none';
+    } else {
+      const geo = { left: '0%', top: '0%', width: '100%', height: '100%' };
+      stage.style.aspectRatio = iw + ' / ' + ih;
+      Object.assign(pphoto.style, geo);
+      Object.assign(pboxes.style, geo);
+
+      // 編輯遮罩時標出會被裁掉的範圍——那裡的部位仍然要遮，構圖隨時可能拉遠
+      if (m === 'censor' && item.frameOn) {
+        const r = srcRect(item.measure.content, item.adjust);
+        cropline.style.display = '';
+        cropline.style.left   = (r.sx / iw * 100) + '%';
+        cropline.style.top    = (r.sy / ih * 100) + '%';
+        cropline.style.width  = (r.sw / iw * 100) + '%';
+        cropline.style.height = (r.sh / ih * 100) + '%';
+      } else {
+        cropline.style.display = 'none';
+      }
+    }
+    repaintBoxes(item);
+  }
+
+  function repaintBoxes(item) {
+    const iw = item.measure.w, ih = item.measure.h;
+    const k = Math.min(1, BOX_CANVAS_MAX / Math.max(iw, ih));
+    const cw = Math.max(1, Math.round(iw * k));
+    const chh = Math.max(1, Math.round(ih * k));
+    if (pboxes.width !== cw || pboxes.height !== chh) {
+      pboxes.width = cw;
+      pboxes.height = chh;
+    }
+    boxScale = cw / iw;
+
+    bctx.clearRect(0, 0, cw, chh);
+    if (!item.censorOn || !item.boxes.length) return;
+
+    const editing = effMode(item) === 'censor';
+    const rect = b => [b.x * boxScale, b.y * boxScale, b.w * boxScale, b.h * boxScale];
+
+    // 分兩趟畫：先全部填黑，裝飾才不會被後面畫的方塊蓋掉
+    bctx.fillStyle = '#000';
+    for (const b of item.boxes) bctx.fillRect(...rect(b));
+    if (!editing) return;
+
+    for (const b of item.boxes) {
+      if (!b.inferred) continue;
+      const [x, y, w, h] = rect(b);
+      bctx.strokeStyle = '#f8b72a';
+      bctx.lineWidth = 2;
+      bctx.setLineDash([6, 4]);
+      bctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      bctx.setLineDash([]);
+    }
+
+    if (selectedBox && item.boxes.includes(selectedBox)) {
+      const [x, y, w, h] = rect(selectedBox);
+      bctx.strokeStyle = '#ff5a3c';
+      bctx.lineWidth = 3;
+      bctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+      // 方塊是全黑的，把手要白底深框才看得見
+      for (const [hx, hy] of handlePoints(x, y, w, h)) {
+        bctx.fillStyle = '#fff';
+        bctx.strokeStyle = '#ff5a3c';
+        bctx.lineWidth = 2;
+        bctx.beginPath();
+        bctx.rect(hx - HANDLE_PX / 2, hy - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+        bctx.fill();
+        bctx.stroke();
+      }
+    }
+  }
+
+  function handlePoints(x, y, w, h) {
+    return [
+      [x, y], [x + w / 2, y], [x + w, y],
+      [x, y + h / 2], [x + w, y + h / 2],
+      [x, y + h], [x + w / 2, y + h], [x + w, y + h],
+    ];
+  }
+
+  /** 依目前開關決定模式列、說明文字與舞台的互動性質 */
+  function syncPreview() {
+    const item = selected >= 0 ? items[selected] : null;
+    const m = effMode(item);
+    const both = !!item && item.censorOn && item.frameOn;
+
+    modes.classList.toggle('show', both);
+    modeC.setAttribute('aria-pressed', String(m === 'censor'));
+    modeF.setAttribute('aria-pressed', String(m === 'frame'));
+
+    stage.classList.toggle('censoring', m === 'censor');
+    stage.classList.toggle('noframe', m !== 'frame');
+    stage.classList.toggle('willcrop', m === 'censor' && !!item && item.frameOn);
+
+    noteC.hidden = m !== 'censor';
+    noteF.hidden = m !== 'frame';
+    // 遮罩根本沒開的時候，別在構圖說明裡提「遮罩是唯讀的」——那是雜訊
+    noteFC.hidden = !both;
+
+    syncControls(current());
+    if (current()) layout(current());
+    updateDetail(item);
+  }
+
+  async function drawPreview() {
+    const token = ++previewToken;
+    const item = selected >= 0 ? items[selected] : null;
+    if (!item) {
+      stage.classList.remove('has');
+      pname.textContent = '';
+      detail.textContent = '';
+      syncPreview();
+      return;
+    }
+
+    pname.textContent = item.file.name;
+
+    if (item.status === 'error') {
+      stage.classList.remove('has', 'busy');
+      hint.textContent = item.file.name + '：' + item.error;
+      detail.textContent = '';
+      syncPreview();
+      return;
+    }
+    if (item.status === 'pending' || !item.measure) {
+      stage.classList.remove('has', 'busy');
+      hint.textContent = '讀取中…';
+      detail.textContent = '';
+      return;
+    }
+
+    if (stage.classList.contains('has')) stage.classList.add('busy');
+    pphoto.src = item.thumbUrl;
+    try {
+      await pphoto.decode();
+    } catch {
+      /* 縮圖 URL 一定解得開（加入清單時就驗過），這裡只是保險 */
+    }
+    if (token !== previewToken) return;
+
+    stage.classList.remove('busy');
+    stage.classList.add('has');
+    syncPreview();
+  }
+
+  function updateDetail(item) {
+    if (!item || item.status !== 'ready') { detail.textContent = ''; return; }
+    if (!item.censorOn) {
+      detail.innerHTML = item.frameOn ? '' : '<span class="w">兩個開關都關：原圖原樣轉存</span>';
+      return;
+    }
+    if (item.detect === 'busy') { detail.textContent = '偵測中…'; return; }
+    if (item.detect !== 'done') { detail.textContent = ''; return; }
+
+    const n = item.boxes.length;
+    const inf = item.boxes.filter(b => b.inferred).length;
+    const parts = [...new Set(item.boxes.map(b => ({
+      BREAST: '胸', GENITALIA: '私處', BUTTOCKS: '臀', ANUS: '臀',
+    }[b.part] || '其他')))].join('、');
+
+    let html = n ? `${n} 個遮罩（${parts}）· 遮蓋 ${(item.areaPct * 100).toFixed(1)}%` : '';
+    if (inf) html += `　含 ${inf} 個推算`;
+    if (!n) html = '<span class="w">未偵測到任何部位，請人工確認</span>';
+    else if (item.areaPct > AREA_WARN) html += '　<span class="w">遮蓋過多，這張可能不能用</span>';
+    detail.innerHTML = html;
+  }
+
+  // ==========================================================================
+  // 構圖調整的互動（與 index.html 同一套；只在 frame 模式生效）
+  // ==========================================================================
+
+  const ZOOM_MIN  = 1;
+  const ZOOM_MAX  = 8;
+  const ZOOM_STEP = 1.25;
+  const WHEEL_K   = 0.0015;
+
+  let pan = null;
+  let pinch = null;
+  const pointers = new Map();
+
+  const clampZoom = v => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+
+  function toOutput(cx, cy) {
+    const r = stage.getBoundingClientRect();
+    const k = SIZE / r.width;
+    return { x: (cx - r.left - r.width / 2) * k, y: (cy - r.top - r.height / 2) * k };
+  }
+
+  function changed(item) {
+    layout(item);
+    const adj = item.adjust;
+    // 半個輸出像素以內當作沒動：手一抖不該讓整列被標成「已調整」
+    item.moved = Math.abs(adj.z - 1) > 1e-3 || Math.abs(adj.dx) > 0.5 || Math.abs(adj.dy) > 0.5;
+    item.cache = null;
+    // 裁切改變 → 遮罩佔可見區域的比例也跟著變
+    if (item.censorOn && item.detect === 'done') item.areaPct = maskedRatio(item);
+    markRow(item);
+    syncControls(item);
+    updateDetail(item);
+  }
+
+  function reset(item) {
+    item.adjust = { z: 1, dx: 0, dy: 0 };
+    changed(item);
+  }
+
+  function zoomTo(item, next, ax, ay) {
+    const adj = item.adjust;
+    const z = clampZoom(next);
+    if (z === adj.z) return;
+    adj.dx = ax - (ax - adj.dx) * (z / adj.z);
+    adj.dy = ay - (ay - adj.dy) * (z / adj.z);
+    adj.z = z;
+    changed(item);
+  }
+
+  function pinchStart(item) {
+    const [a, b] = [...pointers.values()];
+    const m = toOutput((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const adj = item.adjust;
+    return {
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      z: adj.z,
+      ux: (m.x - adj.dx) / adj.z,
+      uy: (m.y - adj.dy) / adj.z,
+    };
+  }
+
+  function startPan(item, cx, cy) {
+    if (!stage.classList.contains('movable')) return;
+    pan = { cx, cy, dx: item.adjust.dx, dy: item.adjust.dy };
+    stage.classList.add('grabbing');
+  }
+
+  zin.addEventListener('click', () => {
+    const it = current();
+    if (it) zoomTo(it, it.adjust.z * ZOOM_STEP, 0, 0);
+  });
+  zout.addEventListener('click', () => {
+    const it = current();
+    if (it) zoomTo(it, it.adjust.z / ZOOM_STEP, 0, 0);
+  });
+  zlevel.addEventListener('click', () => {
+    const it = current();
+    if (it) reset(it);
+  });
+
+  stage.addEventListener('wheel', ev => {
+    const it = current();
+    if (!it || effMode(it) !== 'frame') return;
+    ev.preventDefault();
+    // Firefox 某些設定以「行」為單位回報，換算成像素才不會一格就縮到底
+    const dy = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY;
+    const p = toOutput(ev.clientX, ev.clientY);
+    zoomTo(it, it.adjust.z * Math.exp(-dy * WHEEL_K), p.x, p.y);
+  }, { passive: false });
+
+  // ==========================================================================
+  // 遮罩編輯的互動（與 censor.html 同一套；只在 censor 模式生效）
+  // ==========================================================================
+
+  let drag = null;
+
+  /** 螢幕座標 → 原圖座標。censor 模式下照片鋪滿舞台，換算只是一個比例 */
+  function toImg(ev, item) {
+    const r = stage.getBoundingClientRect();
+    return {
+      x: (ev.clientX - r.left) / r.width * item.measure.w,
+      y: (ev.clientY - r.top) / r.height * item.measure.h,
+    };
+  }
+
+  /** 把手容差用畫布像素換算回原圖座標，圖縮多小都一樣好點 */
+  function hitHandle(p, item) {
+    if (!selectedBox) return null;
+    const r = stage.getBoundingClientRect();
+    const view = r.width / item.measure.w;          // 原圖座標 → 螢幕像素
+    const tol = (HANDLE_PX / boxScale / 2 + 3 / view);
+    const b = selectedBox;
+    const pts = handlePoints(b.x, b.y, b.w, b.h);
+    for (let i = 0; i < pts.length; i++) {
+      if (Math.abs(p.x - pts[i][0]) <= tol && Math.abs(p.y - pts[i][1]) <= tol) return HANDLES[i];
+    }
+    return null;
+  }
+
+  function hitBox(p, item) {
+    // 由後往前找，讓上層的框優先被選到
+    for (let i = item.boxes.length - 1; i >= 0; i--) {
+      const b = item.boxes[i];
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return b;
+    }
+    return null;
+  }
+
+  function afterBoxEdit(item) {
+    item.cache = null;
+    item.areaPct = maskedRatio(item);
+    repaintBoxes(item);
+    markRow(item);
+    updateDetail(item);
+  }
+
+  stage.addEventListener('pointerdown', ev => {
+    const it = current();
+    if (!it) return;
+    const m = effMode(it);
+
+    if (m === 'censor') {
+      if (it.detect !== 'done') return;
+      try { stage.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+      const p = toImg(ev, it);
+      // 把手優先於方塊本身，否則靠邊的把手會被判成「移動」
+      const handle = hitHandle(p, it);
+      if (handle) {
+        const b = selectedBox;
+        drag = { mode: 'resize', box: b, handle,
+                 orig: { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h } };
+        repaintBoxes(it);
+        return;
+      }
+      const hit = hitBox(p, it);
+      if (hit) {
+        selectedBox = hit;
+        drag = { mode: 'move', box: hit, ox: p.x - hit.x, oy: p.y - hit.y };
+      } else {
+        const box = { x: p.x, y: p.y, w: 0, h: 0, cls: 'MANUAL', score: 1, part: 'MANUAL', manual: true };
+        it.boxes.push(box);
+        selectedBox = box;
+        drag = { mode: 'new', box, startX: p.x, startY: p.y };
+      }
+      repaintBoxes(it);
+      return;
+    }
+
+    if (m !== 'frame') return;
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    try { stage.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+    if (pointers.size === 2) {                        // 第二指進來就改判捏合
+      pan = null;
+      stage.classList.remove('grabbing');
+      pinch = pinchStart(it);
+    } else if (pointers.size === 1) {
+      startPan(it, ev.clientX, ev.clientY);
+    }
+  });
+
+  stage.addEventListener('pointermove', ev => {
+    const it = current();
+    if (!it) return;
+    const m = effMode(it);
+
+    if (m === 'censor') {
+      if (it.detect !== 'done') return;
+      if (!drag) {
+        // 沒在拖的時候給游標提示，讓人知道邊角可以拉
+        const p = toImg(ev, it);
+        const h = hitHandle(p, it);
+        pview.style.cursor = h ? CURSORS[h] : (hitBox(p, it) ? 'move' : 'crosshair');
+        return;
+      }
+      const p = toImg(ev, it);
+      if (drag.mode === 'new') {
+        drag.box.x = Math.min(drag.startX, p.x);
+        drag.box.y = Math.min(drag.startY, p.y);
+        drag.box.w = Math.abs(p.x - drag.startX);
+        drag.box.h = Math.abs(p.y - drag.startY);
+      } else if (drag.mode === 'resize') {
+        const o = drag.orig;
+        const h = drag.handle;
+        const cx = v => Math.max(0, Math.min(v, it.measure.w));
+        const cy = v => Math.max(0, Math.min(v, it.measure.h));
+        let { x1, y1, x2, y2 } = o;
+        if (h.includes('n')) y1 = cy(p.y);
+        if (h.includes('s')) y2 = cy(p.y);
+        if (h.includes('w')) x1 = cx(p.x);
+        if (h.includes('e')) x2 = cx(p.x);
+        // 拉過頭讓邊互換時用 min/max 收拾，框不會翻成負的寬高
+        drag.box.x = Math.min(x1, x2);
+        drag.box.y = Math.min(y1, y2);
+        drag.box.w = Math.abs(x2 - x1);
+        drag.box.h = Math.abs(y2 - y1);
+      } else {
+        drag.box.x = Math.max(0, Math.min(p.x - drag.ox, it.measure.w - drag.box.w));
+        drag.box.y = Math.max(0, Math.min(p.y - drag.oy, it.measure.h - drag.box.h));
+      }
+      repaintBoxes(it);
+      return;
+    }
+
+    if (m !== 'frame' || !pointers.has(ev.pointerId)) return;
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const mid = toOutput((a.x + b.x) / 2, (a.y + b.y) / 2);
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      // 縮放與位移一起算：兩指中點原本壓著的那個點，縮放後仍壓在中點下
+      it.adjust.z  = clampZoom(pinch.z * d / pinch.dist);
+      it.adjust.dx = mid.x - pinch.ux * it.adjust.z;
+      it.adjust.dy = mid.y - pinch.uy * it.adjust.z;
+      changed(it);
+      return;
+    }
+    if (pan) {
+      const k = SIZE / stage.getBoundingClientRect().width;
+      it.adjust.dx = pan.dx + (ev.clientX - pan.cx) * k;
+      it.adjust.dy = pan.dy + (ev.clientY - pan.cy) * k;
+      changed(it);
+    }
+  });
+
+  ['pointerup', 'pointercancel'].forEach(type =>
+    stage.addEventListener(type, ev => {
+      const it = current();
+      if (it && effMode(it) === 'censor') {
+        if (!drag) return;
+        // 只是點一下沒拖出範圍、或被拉到幾乎沒有面積的框，都不要留著
+        if (drag.mode !== 'move' && (drag.box.w < 4 || drag.box.h < 4)) {
+          it.boxes = it.boxes.filter(b => b !== drag.box);
+          if (selectedBox === drag.box) selectedBox = null;
+        }
+        drag = null;
+        afterBoxEdit(it);
+        return;
+      }
+      if (!pointers.delete(ev.pointerId)) return;
+      try { stage.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) {
+        pan = null;
+        stage.classList.remove('grabbing');
+        return;
+      }
+      // 捏合放開一指：剩下的那指接手平移，不然圖會卡住
+      const [p] = [...pointers.values()];
+      if (it) startPan(it, p.x, p.y);
+    }));
+
+  stage.addEventListener('dblclick', () => {
+    const it = current();
+    if (it && effMode(it) === 'frame' && it.moved) reset(it);
+  });
+
+  window.addEventListener('keydown', ev => {
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    const it = current();
+    if (!it || effMode(it) !== 'censor' || !selectedBox) return;
+    if (/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    ev.preventDefault();
+    it.boxes = it.boxes.filter(b => b !== selectedBox);
+    // 刪掉推算框之後不能讓它自己長回來，所以記一筆
+    if (selectedBox.inferred) it.inferRejected = true;
+    selectedBox = null;
+    afterBoxEdit(it);
+  });
+
+  modeC.addEventListener('click', () => setMode('censor'));
+  modeF.addEventListener('click', () => setMode('frame'));
+
+  function setMode(m) {
+    const it = selected >= 0 ? items[selected] : null;
+    if (!it || !it.censorOn || !it.frameOn) return;
+    it.mode = m;
+    selectedBox = null;
+    syncPreview();
+  }
+
+  // ==========================================================================
+  // 清單
+  // ==========================================================================
+
+  // Lucide 圖示（https://lucide.dev/icons）。只存 path 資料，外框屬性由 svgIcon 統一補，
+  // 這樣顏色與線寬跟著 .ic 的 CSS 走，不會每個圖示各寫一套。
+  const IC = {
+    grip:   'M9 12h.01M9 5h.01M9 19h.01M15 12h.01M15 5h.01M15 19h.01',
+    frame:  'M22 6H2M22 18H2M6 2v20M18 2v20',
+    eyeOff: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'
+          + 'M14.084 14.158a3 3 0 0 1-4.242-4.242'
+          + 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143'
+          + 'M2 2l20 20',
+  };
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function svgIcon(d) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ic');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', d);
+    svg.append(p);
+    return svg;
+  }
+
+  function badge(text, cls) {
+    const s = document.createElement('span');
+    s.className = 'badge' + (cls ? ' ' + cls : '');
+    s.textContent = text;
+    return s;
+  }
+
+  /** item → 輸出檔名。整欄重寫時算一次就好，不要每一列各算一次 */
+  function nameMap() {
+    const m = new Map();
+    for (const e of plan().entries) m.set(e.item, e.name);
+    return m;
+  }
+
+  /** 只重畫某一列的文字與標籤，不動 DOM 結構（排序中不能整批重建） */
+  function markRow(item, names) {
+    if (!item.li) return;
+    const map = names || nameMap();
+    const mine = map.get(item);
+
+    // 序號是這一列最該一眼看到的東西——它決定 ZIP 裡的排序。
+    // 序號本身 aria-hidden，所以「不會輸出」這件事必須寫進 li 的 aria-label，
+    // 否則螢幕閱讀器只聽得到檔名，完全感知不到那個視覺上的「–」
+    const ord = [...map.keys()].indexOf(item) + 1;
+    item.ordEl.textContent = ord > 0 ? String(ord).padStart(String(map.size).length, '0') : '–';
+    item.ordEl.classList.toggle('none', ord <= 0);
+    item.li.setAttribute('aria-label',
+      (ord > 0 ? `第 ${ord} 張，` : '不會輸出，') + item.file.name);
+
+    item.dimEl.textContent = (item.file.size / 1024).toFixed(0) + ' KB'
+      + (item.measure ? ` · ${item.measure.w}×${item.measure.h}` : '');
+
+    const tags = item.tagsEl;
+    tags.innerHTML = '';
+    if (mine) tags.append(badge(mine));
+    if (item.status === 'pending') tags.append(badge('讀取中'));
+    else if (item.status === 'error') tags.append(badge(item.error, 'bad'));
+    else {
+      if (!processed(item)) tags.append(badge('原圖原樣'));
+      if (item.trim) tags.append(badge('已去' + (item.trim.axis === 'x' ? '左右' : '上下') + '白邊'));
+      if (item.moved) tags.append(badge('已手動調整'));
+      if (item.censorOn) {
+        if (item.detect === 'busy') tags.append(badge('偵測中'));
+        else if (item.detect === 'error') tags.append(badge('偵測失敗', 'bad'));
+        else if (item.detect === 'done') {
+          const n = item.boxes.length;
+          tags.append(n ? badge(n + ' 個遮罩', 'ok') : badge('未偵測', 'bad'));
+          if (n && item.areaPct > AREA_WARN) tags.append(badge('遮蓋 ' + (item.areaPct * 100).toFixed(0) + '%', 'warn'));
+          if (item.boxes.some(b => b.inferred)) tags.append(badge('含推算', 'warn'));
+        }
+      }
+    }
+    if (item.dup) tags.append(badge('重複', 'warn'));
+
+    item.frameChip.classList.toggle('on', item.frameOn);
+    item.censorChip.classList.toggle('on', item.censorOn);
+    item.frameChip.setAttribute('aria-pressed', String(item.frameOn));
+    item.censorChip.setAttribute('aria-pressed', String(item.censorOn));
+  }
+
+  function render() {
+    list.innerHTML = '';
+    const names = nameMap();
+    items.forEach((item, i) => {
+      const li = document.createElement('li');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'option');
+      if (i === selected) li.classList.add('sel');
+      li._item = item;
+      item.li = li;
+
+      // 序號：唯讀讀數，不可聚焦、不接指標事件。aria-hidden 是因為
+      // li 的 aria-label 已經念過「第 N 張」，否則數字會被念兩次
+      const lead = document.createElement('div');
+      lead.className = 'lead';
+      const ord = document.createElement('span');
+      ord.className = 'ord';
+      ord.setAttribute('aria-hidden', 'true');
+
+      // 把手：唯一的拖曳表面，也是鍵盤重排的入口
+      const grip = document.createElement('button');
+      grip.type = 'button';
+      grip.className = 'grip';
+      grip.title = '拖曳排序（聚焦後可用 ↑↓）';
+      grip.setAttribute('aria-label', '拖曳排序');
+      grip.append(svgIcon(IC.grip));
+
+      lead.append(ord, grip);
+      item.ordEl = ord;
+
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.src = item.thumbUrl;
+      img.alt = '';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = item.file.name;
+      const dim = document.createElement('div');
+      dim.className = 'dim';
+      const tags = document.createElement('div');
+      tags.className = 'tags';
+      meta.append(nm, dim, tags);
+      item.dimEl = dim;
+      item.tagsEl = tags;
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      const fc = document.createElement('button');
+      fc.type = 'button';
+      fc.className = 'chip frame';
+      fc.append(svgIcon(IC.frame), document.createTextNode('套框'));
+      const cc = document.createElement('button');
+      cc.type = 'button';
+      cc.className = 'chip censor';
+      cc.append(svgIcon(IC.eyeOff), document.createTextNode('遮罩'));
+      chips.append(fc, cc);
+      item.frameChip = fc;
+      item.censorChip = cc;
+
+      li.append(lead, img, meta, chips);
+      list.append(li);
+
+      // 點晶片只切開關，不能順便換預覽——那會讓「掃過整欄調開關」變得很煩
+      fc.addEventListener('click', ev => { ev.stopPropagation(); toggleFrame(item); });
+      cc.addEventListener('click', ev => { ev.stopPropagation(); toggleCensor(item); });
+      grip.addEventListener('click', ev => ev.stopPropagation());
+      grip.addEventListener('pointerdown', ev => startSort(ev, li));
+      grip.addEventListener('keydown', ev => gripKey(ev, item));
+
+      li.addEventListener('click', () => select(items.indexOf(item)));
+      li.addEventListener('keydown', ev => {
+        if (ev.key === 'ArrowDown') { ev.preventDefault(); select(Math.min(items.length - 1, items.indexOf(item) + 1)); }
+        if (ev.key === 'ArrowUp')   { ev.preventDefault(); select(Math.max(0, items.indexOf(item) - 1)); }
+        if (ev.key === 'Enter')     select(items.indexOf(item));
+      });
+
+      markRow(item, names);
+    });
+  }
+
+  /** 序號是跟著順序走的，任何一列變動都要整欄重寫 */
+  function renumber() {
+    const names = nameMap();
+    for (const it of items) markRow(it, names);
+  }
+
+  async function select(i) {
+    if (i < 0 || i >= items.length) return;
+    selected = i;
+    selectedBox = null;
+    syncSel();
+    if (items[i].li) items[i].li.focus({ preventScroll: true });
+    await drawPreview();
+  }
+
+  // ==========================================================================
+  // 拖曳排序
+  //
+  // 用 pointer 事件而不是 HTML5 drag-and-drop：drop zone 已經在監聽
+  // dragenter/dragover/drop 收外部檔案，兩套混在一起只能靠
+  // dataTransfer.files 是否為空去分辨，很脆。
+  //
+  // **不使用 setPointerCapture。** 排序過程要把被拖的那個 <li> 搬到別的位置，
+  // 而 Chrome 在元素被重新插入 DOM 時會釋放它的 pointer capture——後續的
+  // pointermove／pointerup 就再也送不到它身上，endSort() 不會執行，
+  // .dragging 與選取狀態就卡在畫面上。改成監聽 window 完全避開這件事。
+  //
+  // 動畫用 FLIP：先量搬動前的版面位置，搬完再量一次，把差值當成起點反推回去
+  // 讓瀏覽器補這段位移。只動 transform，不動 width/height，才不會每格重排版。
+  //
+  // 為什麼不引第三方套件（SortableJS 之類）：這個專案刻意零依賴、零 build，
+  // 連 ZIP 都是手寫的。這裡真正的問題只有「capture 掉了」一個，修掉就好，
+  // 不值得為它多背一個 45KB 的 vendor 檔。
+  // ==========================================================================
+
+  const REORDER_MS = 180;
+  const REORDER_EASE = 'cubic-bezier(.2, .8, .2, 1)';
+  const noMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let sorting = null;
+
+  /** 執行 mutate()，讓其他列用 FLIP 滑到新位置（offsetTop 不受 transform 影響） */
+  function flipRows(mutate, except) {
+    if (noMotion()) { mutate(); return; }
+    const rows = [...list.children].filter(r => r !== except);
+    const before = new Map(rows.map(r => [r, r.offsetTop]));
+    mutate();
+    for (const r of rows) {
+      const dy = before.get(r) - r.offsetTop;
+      if (!dy) continue;
+      r.animate(
+        [{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+        { duration: REORDER_MS, easing: REORDER_EASE },
+      );
+    }
+  }
+
+  function startSort(ev, li) {
+    if (sorting) return;
+    if (ev.button !== undefined && ev.button !== 0) return;
+    ev.preventDefault();
+    sorting = { li, id: ev.pointerId, startY: ev.clientY, shift: 0 };
+    li.classList.add('dragging');
+    list.classList.add('sorting');
+    // 監聽 window 而不是被拖的節點——它待會會被搬走
+    window.addEventListener('pointermove', onSortMove);
+    window.addEventListener('pointerup', endSort);
+    window.addEventListener('pointercancel', endSort);
+  }
+
+  function onSortMove(ev) {
+    if (!sorting || ev.pointerId !== sorting.id) return;
+    ev.preventDefault();
+    const s = sorting;
+    const dy = ev.clientY - s.startY;
+    s.li.style.transform = `translateY(${dy - s.shift}px)`;
+
+    // 用版面座標判斷落點，避開其他列正在跑動畫時量到的中間值
+    const mid = s.li.offsetTop + (dy - s.shift) + s.li.offsetHeight / 2;
+    for (const other of [...list.children]) {
+      if (other === s.li) continue;
+      const om = other.offsetTop + other.offsetHeight / 2;
+      const after = s.li.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (after ? mid > om : mid < om) {
+        // 搬動會改變自己的版面位置，要把差值補進 shift，手指下的那一列才不會跳
+        const was = s.li.offsetTop;
+        flipRows(() => list.insertBefore(s.li, after ? other.nextSibling : other), s.li);
+        s.shift += s.li.offsetTop - was;
+        s.li.style.transform = `translateY(${dy - s.shift}px)`;
+        renumber();                       // 序號即時跟著跳，這是最直接的落點回饋
+        break;
+      }
+    }
+  }
+
+  function endSort() {
+    if (!sorting) return;
+    const { li } = sorting;
+    sorting = null;
+    window.removeEventListener('pointermove', onSortMove);
+    window.removeEventListener('pointerup', endSort);
+    window.removeEventListener('pointercancel', endSort);
+    list.classList.remove('sorting');
+
+    // 從目前的偏移滑回定位，再拿掉浮起的樣式
+    const from = li.style.transform;
+    li.style.transform = '';
+    if (from && !noMotion()) {
+      li.animate(
+        [{ transform: from }, { transform: 'none' }],
+        { duration: REORDER_MS, easing: REORDER_EASE },
+      ).finished.catch(() => {}).then(() => li.classList.remove('dragging'));
+    } else {
+      li.classList.remove('dragging');
+    }
+    commitOrder();
+  }
+
+  /** 依 DOM 現況回寫 items，並讓 selected 跟著原本那張走 */
+  function commitOrder() {
+    const sel = selected >= 0 ? items[selected] : null;
+    items = [...list.children].map(li => li._item);
+    selected = sel ? items.indexOf(sel) : -1;
+    syncSel();
+    renumber();
+  }
+
+  /** 選取狀態一律由 selected 重新推導，不靠增量維護——那正是它會殘留的原因 */
+  function syncSel() {
+    items.forEach((it, i) => {
+      if (it.li) it.li.classList.toggle('sel', i === selected);
+    });
+  }
+
+  /** 拖曳的鍵盤替代：把手聚焦時用 ↑↓ 搬動這一列 */
+  function gripKey(ev, item) {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    ev.preventDefault();
+    const i = items.indexOf(item);
+    const j = i + (ev.key === 'ArrowDown' ? 1 : -1);
+    if (j < 0 || j >= items.length) return;
+
+    // 選取跟著「原本那張照片」走，不是跟著索引走
+    const sel = selected >= 0 ? items[selected] : null;
+    // 搬 DOM 而不是重建，才有得 FLIP，焦點也不會掉
+    flipRows(() => {
+      items.splice(j, 0, items.splice(i, 1)[0]);
+      const ref = ev.key === 'ArrowDown' ? item.li.nextSibling.nextSibling : item.li.previousSibling;
+      list.insertBefore(item.li, ref);
+    });
+    selected = sel ? items.indexOf(sel) : -1;
+    syncSel();
+    renumber();
+    item.li.querySelector('.grip').focus();
+  }
+
+  // ==========================================================================
+  // 開關
+  // ==========================================================================
+
+  // 切開關會改到副檔名（原圖原樣那格跟著原圖走），所以整欄的名字都要重算
+  function toggleFrame(item) {
+    clearUndo();
+    item.frameOn = !item.frameOn;
+    item.cache = null;
+    if (item.censorOn && item.detect === 'done') item.areaPct = maskedRatio(item);
+    renumber();
+    if (items[selected] === item) syncPreview();
+    updateGo();
+  }
+
+  function toggleCensor(item) {
+    clearUndo();
+    item.censorOn = !item.censorOn;
+    item.cache = null;
+    renumber();
+    if (items[selected] === item) syncPreview();
+    updateGo();
+    if (item.censorOn) runDetections();
+  }
+
+  /**
+   * 一鍵：兩個開關各自可以全開或全關。
+   *
+   * 只動**真的需要改變**的項目——無條件重設會把已經編好的 blob 全部丟掉，
+   * 30 張 1000×1000 的 JPEG 重編是實打實的成本。
+   *
+   * 作用域對齊到 outputtable：計數的分母、輸出按鈕的張數、以及實際被改到的
+   * 項目必須是同一個集合，否則畫面上的數字會互相矛盾。
+   */
+  function bulkSet(key, on, btn) {
+    const changed = items.filter(outputtable).filter(it => it[key] !== on);
+    if (!changed.length) {
+      // 已經在目標狀態。不設 disabled——焦點停在被 disable 的按鈕上會掉回
+      // <body>，下一次 Tab 得從頭來過。改用一次回彈表示「有收到，沒事可做」
+      pulse(btn);
+      return;
+    }
+
+    // 遮罩全關是四顆按鈕裡唯一可能造成漏遮的，留一條回頭路。
+    // boxes 與 detect 都沒被動到，所以復原只是把旗標寫回去，不會重跑偵測。
+    const undoable = key === 'censorOn' && !on;
+    const snapshot = undoable ? changed.slice() : null;
+
+    for (const it of changed) { it[key] = on; it.cache = null; }
+    if (key === 'frameOn') {
+      // 裁切範圍變了，遮罩佔可見區域的比例要跟著重算
+      for (const it of changed) {
+        if (it.censorOn && it.detect === 'done') it.areaPct = maskedRatio(it);
+      }
+    }
+    renumber();
+    syncPreview();
+    updateGo();
+
+    if (undoable) {
+      offerUndo(`已關閉 ${snapshot.length} 張的遮罩`, () => {
+        for (const it of snapshot) { it.censorOn = true; it.cache = null; }
+        renumber();
+        syncPreview();
+        updateGo();
+        setStatus(`已復原 ${snapshot.length} 張的遮罩`, 'done');
+      });
+    }
+    if (key === 'censorOn' && on) runDetections();
+  }
+
+  function pulse(btn) {
+    if (!btn) return;
+    btn.classList.remove('pulse');
+    void btn.offsetWidth;                 // 強制重排，同一顆連按才會每次都跳
+    btn.classList.add('pulse');
+  }
+
+  const setLit = (btn, on) =>
+    on ? btn.setAttribute('data-state', 'lit') : btn.removeAttribute('data-state');
+
+  /**
+   * 一鍵區的狀態。計數是權威來源，點亮只是視覺冗餘——所以刻意不用
+   * aria-pressed：那會宣告「這是可取消的切換鈕」，但按第二次是無操作。
+   */
+  function syncBulk() {
+    const ready = items.filter(outputtable);
+    const n = ready.length;
+
+    for (const key of ['frameOn', 'censorOn']) {
+      const on = ready.filter(it => it[key]).length;
+      bulkCount[key].innerHTML = n ? `<b>${on}</b> / ${n} 張` : '—';
+      const base = key === 'frameOn' ? 'frame' : 'censor';
+      setLit(bulkBtns[base + 'On'],  n > 0 && on === n);
+      setLit(bulkBtns[base + 'Off'], n > 0 && on === 0);
+    }
+
+    // 開了遮罩、偵測也跑完了，卻一個部位都沒抓到＝輸出時實際上沒有遮罩
+    const zero = ready.filter(it =>
+      it.censorOn && it.detect === 'done' && !it.boxes.length).length;
+    noboxEl.hidden = !zero;
+    if (zero) noboxEl.textContent = `⚠ 其中 ${zero} 張沒偵測到任何部位，輸出時不會有遮罩`;
+  }
+
+  // ---- 復原：只有「遮罩全關」用得到 ----
+
+  let pendingUndo = null;
+
+  function offerUndo(text, fn) {
+    setStatus(text, '', true);
+    pendingUndo = fn;
+    undoBtn.hidden = false;
+  }
+
+  function clearUndo() {
+    pendingUndo = null;
+    undoBtn.hidden = true;
+  }
+
+  undoBtn.addEventListener('click', () => {
+    const fn = pendingUndo;
+    clearUndo();
+    if (fn) fn();
+  });
+
+  bulkBtns.frameOn  .addEventListener('click', ev => bulkSet('frameOn',  true,  ev.currentTarget));
+  bulkBtns.frameOff .addEventListener('click', ev => bulkSet('frameOn',  false, ev.currentTarget));
+  bulkBtns.censorOn .addEventListener('click', ev => bulkSet('censorOn', true,  ev.currentTarget));
+  bulkBtns.censorOff.addEventListener('click', ev => bulkSet('censorOn', false, ev.currentTarget));
+
+  // ==========================================================================
+  // 偵測排程：只跑開了遮罩、而且還沒偵測過的那幾張
+  // ==========================================================================
+
+  let detecting = false;
+
+  async function runDetections() {
+    if (detecting) return;
+    const pending = () => items.filter(it =>
+      it.censorOn && it.status === 'ready' && it.detect === 'idle');
+    if (!pending().length) return;
+
+    detecting = true;
+    updateGo();
+    try {
+      await ensureModel();
+    } catch {
+      detecting = false;
+      updateGo();
+      return;
+    }
+
+    for (;;) {
+      const queue = pending();
+      if (!queue.length) break;
+      for (let i = 0; i < queue.length; i++) {
+        const it = queue[i];
+        // queue 是進迴圈時的快照。使用者中途按「遮罩全關」的話，繼續偵測
+        // 已經關掉的圖只會讓輸出按鈕多卡好幾分鐘，最後還顯示「完成，共 0 張」
+        if (!it.censorOn) continue;
+        it.detect = 'busy';
+        markRow(it);
+        if (items[selected] === it) updateDetail(it);
+        setStatus(`偵測中 ${i + 1} / ${queue.length}…`);
+        let bmp = null;
+        try {
+          bmp = await loadBitmap(it.file);
+          it.boxes = await detect(bmp, it.inferRejected);
+          it.areaPct = maskedRatio(it);
+          it.detect = 'done';
+          it.cache = null;
+        } catch (err) {
+          it.detect = 'error';
+          it.error = err.message || String(err);
+        } finally {
+          // 逐張釋放，否則一次 30 張高解析度照片會把分頁記憶體吃光
+          if (bmp) bmp.close();
+        }
+        markRow(it);
+        if (items[selected] === it) { updateDetail(it); repaintBoxes(it); }
+      }
+    }
+
+    detecting = false;
+    updateGo();
+    const done = items.filter(it => it.censorOn && it.detect === 'done');
+    const zero = done.filter(it => !it.boxes.length).length;
+    setStatus(`偵測完成，共 ${done.length} 張` + (zero ? `，其中 ${zero} 張未偵測到任何部位` : ''),
+              zero ? 'err' : '');
+  }
+
+  // ==========================================================================
+  // 選檔：追加，不是取代
+  // ==========================================================================
+
+  const isImage = f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+
+  async function accept(fileList) {
+    const files = [...fileList].filter(isImage);
+    if (!files.length) return;
+
+    const seen = new Set(items.map(it => it.file.name + '|' + it.file.size + '|' + it.file.lastModified));
+    const added = [];
+
+    for (const file of files) {
+      const key = file.name + '|' + file.size + '|' + file.lastModified;
+      const item = {
+        file,
+        thumbUrl: URL.createObjectURL(file),
+        frameOn: true,
+        censorOn: false,
+        status: 'pending',
+        error: '',
+        measure: null,
+        trim: null,
+        adjust: { z: 1, dx: 0, dy: 0 },
+        moved: false,
+        boxes: [],
+        detect: 'idle',
+        areaPct: 0,
+        inferRejected: false,
+        dup: seen.has(key),
+        mode: 'censor',
+        cache: null,
+        li: null, dimEl: null, tagsEl: null, frameChip: null, censorChip: null,
+      };
+      seen.add(key);
+      items.push(item);
+      added.push(item);
+    }
+
+    disarmClear();
+    clearUndo();
+
+    const first = selected < 0;
+    render();
+    updateGo();
+    if (first) await select(0);
+
+    // 量測要解碼原圖，逐張來；順便決定這張到底能不能用
+    for (const item of added) {
+      try {
+        const bmp = await loadBitmap(item.file);
+        item.measure = { w: bmp.width, h: bmp.height, content: contentRect(bmp) };
+        item.trim = item.measure.content.trim;
+        item.status = 'ready';
+        bmp.close();
+      } catch (err) {
+        item.status = 'error';
+        item.error = err.message || String(err);
+      }
+      // 這張能不能輸出決定了整欄的序號，也決定一鍵區計數的分母，
+      // 所以每量好一張就整欄重寫一次，讓數字隨載入進度誠實爬升
+      renumber();
+      updateGo();
+      if (items[selected] === item) await drawPreview();
+    }
+    updateGo();
+    if (items.some(it => it.censorOn)) runDetections();
+  }
+
+  function clearAll() {
+    clearUndo();
+    for (const it of items) URL.revokeObjectURL(it.thumbUrl);
+    items = [];
+    selected = -1;
+    selectedBox = null;
+    previewToken++;
+    list.innerHTML = '';
+    stage.classList.remove('has', 'busy', 'movable', 'grabbing');
+    hint.textContent = '尚未選擇照片';
+    pname.textContent = '';
+    detail.textContent = '';
+    setStatus('');
+    syncPreview();
+    updateGo();
+  }
+
+  // 清空丟掉的是全部遮罩編輯與構圖調整，可能是半小時的工作，所以要確認。
+  // 用兩段式按鈕而不是 confirm()——原生對話框會擋住整個分頁的事件迴圈。
+  //
+  // 沒有逾時：倒數是看不見的，使用者停下來想一下就被靜默解除。改成一定要
+  // 明確選一邊，並提供取消這條退出路徑。
+  function disarmClear() {
+    if (!clearBtn.classList.contains('arm')) return;
+    clearBtn.classList.remove('arm');
+    cancelBtn.hidden = true;
+    updateGo();
+  }
+
+  clearBtn.addEventListener('click', () => {
+    if (!items.length) return;
+    if (clearBtn.classList.contains('arm')) {
+      disarmClear();
+      clearAll();
+      return;
+    }
+    clearBtn.classList.add('arm');
+    clearText.textContent = `確定清空 ${items.length} 張`;
+    cancelBtn.hidden = false;
+  });
+
+  cancelBtn.addEventListener('click', disarmClear);
+  window.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') disarmClear();
+  });
+
+  drop.addEventListener('click', () => { if (fileOk) picker.click(); });
+  picker.addEventListener('change', () => {
+    if (picker.files.length) accept(picker.files);
+    picker.value = '';                       // 同一批再選一次也要能觸發 change
+  });
+  ['dragenter', 'dragover'].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('hot'); }));
+  ['dragleave', 'drop'].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('hot'); }));
+  drop.addEventListener('drop', ev => {
+    if (fileOk && ev.dataTransfer.files.length) accept(ev.dataTransfer.files);
+  });
+
+  oname.addEventListener('input', renumber);
+
+  // ==========================================================================
+  // 輸出
+  // ==========================================================================
+
+  go.addEventListener('click', async () => {
+    if (busy || detecting) return;
+    const { folder, entries } = plan();
+    if (!entries.length) return;
+
+    busy = true;
+    updateGo();
+
+    const out = [];
+    let failed = 0;
+
+    for (let i = 0; i < entries.length; i++) {
+      const { item, name } = entries[i];
+      setStatus(`輸出中 ${i + 1} / ${entries.length}…`);
+      try {
+        let bytes;
+        if (!processed(item)) {
+          // 兩個開關都關：原始位元組原樣，不解碼也不重新編碼。
+          // 這是四種組合裡唯一無損的一格，重編只會白白掉畫質。
+          bytes = new Uint8Array(await item.file.arrayBuffer());
+        } else {
+          const blob = item.cache ? item.cache.blob : await compose(item);
+          item.cache = { blob };
+          bytes = new Uint8Array(await blob.arrayBuffer());
+        }
+        out.push({ name, bytes });
+      } catch (err) {
+        failed++;
+        item.status = 'error';
+        item.error = err.message || String(err);
+        markRow(item);
+      }
+    }
+
+    if (!out.length) {
+      setStatus('全部輸出失敗', 'err');
+    } else if (out.length === 1) {
+      // 單張不多包一層 ZIP，也就沒有資料夾
+      download(new Blob([out[0].bytes]), out[0].name, 30000);
+      setStatus('已下載 1 張' + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
+    } else {
+      setStatus('打包中…');
+      const zip = makeZip(out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes })));
+      const zipFile = folder + '.zip';
+      download(zip, zipFile, 30000);
+      const mb = (zip.size / 1048576).toFixed(1);
+      setStatus(`已打包 ${out.length} 張 · ${zipFile}（${mb} MB）` + (failed ? `，${failed} 張失敗` : ''),
+                failed ? 'err' : 'done');
+    }
+
+    busy = false;
+    updateGo();
+  });
+
+  function updateGo() {
+    const ready = items.filter(outputtable);
+    // 數的是**效果**不是意圖：開了遮罩但一個部位都沒抓到的那張，輸出時
+    // 其實沒有任何遮罩。把它算進來就是一個灌水的保證
+    const withCensor = ready.filter(it => it.censorOn && it.boxes.length > 0).length;
+
+    syncBulk();
+
+    // 沒照片時整批套用、輸出命名、清空都無事可做。與其擺一排停用的控制項，
+    // 不如整塊收起來，讓選檔區是這一欄唯一的動作
+    const empty = !items.length;
+    namingEl.hidden = empty;
+    bulkEl.hidden = empty;
+    clearBtn.hidden = empty;
+    if (empty) cancelBtn.hidden = true;
+
+    clearBtn.disabled = empty;
+    if (!clearBtn.classList.contains('arm')) {
+      clearText.textContent = items.length ? `清空 (${items.length})` : '清空';
+    }
+    for (const b of Object.values(bulkBtns)) b.disabled = empty;
+
+    go.disabled = busy || detecting || !ready.length;
+    if (!items.length) { go.textContent = '選擇照片'; return; }
+    if (detecting)     { go.textContent = '偵測中…'; return; }
+    if (!ready.length) { go.textContent = '沒有可輸出的照片'; return; }
+
+    // 含遮罩張數是下載前的最後一道回饋——一鍵可以把整批關掉，逐張也可能關過頭
+    const tail = withCensor ? `（${withCensor} 張含遮罩）` : '';
+    go.textContent = ready.length > 1
+      ? `打包下載 ${ready.length} 張${tail}`
+      : `下載 1 張${tail}`;
+  }
+
+  /** 任何新的狀態訊息都會撤掉待復原的提議——除非明講要留著 */
+  function setStatus(text, cls, keepUndo) {
+    statusEl.textContent = text;
+    statusEl.className = cls || '';
+    if (!keepUndo) clearUndo();
+  }
+
+  // ==========================================================================
+  // 啟動
+  // ==========================================================================
+
+  if (!fileOk) {
+    gate.classList.add('show');
+    drop.classList.add('off');
+    drop.querySelector('strong').textContent = '請改用本機 server 開啟這一頁';
+    drop.querySelector('small').textContent = 'file:// 下外框與偵測模型都載不進來';
+  }
+
+  syncPreview();
+  updateGo();
+})();
+</script>
+</body>
+</html>
