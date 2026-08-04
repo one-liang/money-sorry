@@ -25,7 +25,9 @@ const IMG_DIR = path.resolve(ROOT, process.argv[2] || 'test');
 const OUT_DIR = path.join(HERE, 'out');
 const PORT = 3112;
 const EPS = 0.6;          // 像素比對容差：computed style 會有四捨五入
-const BASE_REF = 'develop';   // 沒動過的輸出要對得上這個分支
+// 沒動過的輸出要對得上這個 ref。刻意釘在「加這個功能之前的最後一次發布」，
+// 不能寫 develop——功能合進去之後那就變成跟自己比，這項檢查會永遠通過。
+const BASE_REF = 'v1.2.0';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
