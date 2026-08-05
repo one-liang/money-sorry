@@ -6,7 +6,8 @@
   "scripts": {
     "censor": "node censor.mjs",
     "preview-adjust": "node preview-adjust.mjs",
-    "studio": "node studio.mjs"
+    "studio": "node studio.mjs",
+    "amiami": "node amiami.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

@@ -1,0 +1,18 @@
+<!-- Cloudflare 的「Just a moment…」挑戰頁。
+     代理第一次抓某個網址時幾乎一定先拿到這頁（實測約 6KB），
+     它有 <head> 但沒有 #search_table，認不出來就會變成假的「查無商品」。
+     結構仿真實回應，內容為自撰。 -->
+<html lang="en-US">
+<head>
+  <title>Just a moment...</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex,nofollow">
+</head>
+<body class="no-js">
+  <div class="main-wrapper">
+    <div id="challenge-running">Checking your browser…</div>
+    <form id="challenge-form" action="/top/search/list?__cf_chl_f_tk=TESTTOKEN" method="POST"></form>
+  </div>
+  <script src="/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script>
+</body>
+</html>
