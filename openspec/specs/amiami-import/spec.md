@@ -142,13 +142,20 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 ### Requirement: 內文擷取規則
 
-工具 SHALL 自商品頁的說明區塊擷取「製品仕様」與「解説」的標題與內文。`.hashtag-container` 區塊 MUST 排除。
+工具 SHALL 自商品頁的說明區塊只擷取「製品仕様」的標題與內文。「解説」與其餘段落 MUST NOT 被取用——上架用得到的是規格，解説是廠商的行銷文案，貼出去只會稀釋規格。排除 MUST 發生在資料層，而不是取來之後在畫面上藏起來。`.hashtag-container` 區塊 MUST 排除。
+
+規格段落 SHALL 優先以商品頁給它的 id 定位，該 id 不存在時才退回以標題文字比對——標題文字是站方隨時可能改寫的顯示內容。
 
 換行 MUST 依原始的 `<br>` 還原。僅取純文字會使規格黏成單一長串（如 `【サイズ】全高：約140mm【素材】プラスチック`），與頁面上的逐行呈現不符。
 
 內文 SHALL **原樣保留日文**，MUST NOT 翻譯或改寫。
 
-說明區塊不存在或擷取不到內容時，工具 SHALL 明確標示未取得內文，MUST NOT 悄悄產生空字串。內文擷取的失敗與圖片匯入的失敗 MUST 互相獨立。
+說明區塊不存在、或裡面找不到規格段落時，工具 SHALL 明確標示未取得內文，MUST NOT 悄悄產生空字串，也 MUST NOT 退而取其他段落充數。內文擷取的失敗與圖片匯入的失敗 MUST 互相獨立。
+
+#### Scenario: 只取規格
+
+- **WHEN** 商品頁的說明區塊同時有「製品仕様」與「解説」
+- **THEN** 擷取結果只有「製品仕様」那一段，解説的內容 MUST NOT 出現在任何輸出裡
 
 #### Scenario: 規格逐行呈現
 
@@ -172,7 +179,7 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 ### Requirement: 內文的頁面落點
 
-工具 SHALL 於頁面上提供內文面板，顯示擷取到的規格與解說，並提供複製動作。
+工具 SHALL 於頁面上提供內文面板，顯示擷取到的規格，並提供複製動作。面板是內文**唯一**的落點：內文 MUST NOT 被寫進輸出的 ZIP。它的用途是被貼進賣場的欄位，留在頁面上複製比從壓縮檔裡撈出一個檔案再開起來看更短。
 
 多次匯入時，內文 SHALL 以商品為單位累積，MUST NOT 只保留最後一次匯入的結果——清單本來就允許混合多個商品。
 
@@ -184,7 +191,12 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 #### Scenario: 多商品累積
 
 - **WHEN** 使用者先後匯入兩個不同商品
-- **THEN** 內文面板同時保留兩個商品的內文，各自標明所屬商品
+- **THEN** 內文面板同時保留兩個商品的內文，各自成塊且之間有可見的分界
+
+#### Scenario: 內文不進 ZIP
+
+- **WHEN** 使用者匯入商品後輸出圖片
+- **THEN** ZIP 內只有圖片，MUST NOT 出現內文檔案
 
 ### Requirement: 商品名可填入輸出命名
 
