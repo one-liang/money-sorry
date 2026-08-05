@@ -869,7 +869,8 @@ const run = async () => {
     // details 是收合的，innerText 只拿得到 summary，要用 textContent
     const notes = await page.locator('details.notes').textContent();
     check('隱私聲明搬到使用說明', notes.includes('你自己的照片不會被送出'));
-    check('.txt 說明搬到使用說明', notes.includes('.txt'));
+    check('商品說明的去向寫進使用說明', notes.includes('複製全部'));
+    check('使用說明不再提到已移除的 .txt', !notes.includes('.txt'));
     check('勾選功能寫進使用說明', notes.includes('核取方塊'));
     check('編輯遮罩的操作說明搬到使用說明', notes.includes('在圖上'));
     check('調整構圖的操作說明搬到使用說明', notes.includes('外框固定不動'));
@@ -1111,10 +1112,9 @@ const run = async () => {
     await page.evaluate(() => {
       const p = document.getElementById('expanel');
       p.hidden = false;
-      document.getElementById('exp-title').textContent = 'テスト商品 完成品フィギュア';
       document.getElementById('exp-body').innerHTML =
-        '<div class="exp-item"><div class="exp-sec"><div class="exp-h">製品仕様</div>' +
-        '<p class="exp-b">' + '塗装済み完成品<br>'.repeat(8) + '</p></div></div>';
+        '<div class="exp-item"><div class="exp-h">製品仕様</div>' +
+        '<p class="exp-b">' + '塗装済み完成品<br>'.repeat(8) + '</p></div>';
     });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(300);
@@ -1138,16 +1138,12 @@ const run = async () => {
   }
 
   // ------------------------------------------------------------------
-  console.log('\n[13c] 商品說明的標題與層級');
+  console.log('\n[13c] 商品說明的層級，以及頁面不再有導覽列');
   {
     const { ctx, page } = await open(browser, 'studio.html');
-    check('#exp-title 是面板自己的標題列，不是 .panel h2 的小標籤樣式',
-      await page.evaluate(() => {
-        const t = document.getElementById('exp-title');
-        const s = getComputedStyle(t);
-        return t.closest('.exphead') !== null &&
-               s.textTransform === 'none' && parseFloat(s.fontSize) > 14;
-      }));
+    check('面板不放商品名稱標題', await page.locator('#exp-title').count() === 0);
+    check('面板只剩「複製全部」這個動作',
+      await page.locator('#expanel .exphead > *').count() === 1);
     check('段落標題不是靠字級跟內文區分',
       await page.evaluate(() => {
         // .exp-h 是藥丸標籤：有底色、有圓角
@@ -1161,6 +1157,7 @@ const run = async () => {
       }));
     check('面板不再有「商品說明」這個標題文字',
       !(await page.locator('#expanel').textContent()).includes('商品說明'));
+    check('本頁沒有三頁互切的導覽列', await page.locator('nav.tabs').count() === 0);
     await ctx.close();
   }
 
