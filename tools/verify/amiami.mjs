@@ -3,7 +3,7 @@
  *
  *   node tools/verify/amiami.mjs
  *
- * 只驗**純函式**：parseSearch / parseProduct / parseExplain / cleanTitle / blockText，
+ * 只驗**純函式**：parseSearch / parseProduct / parseExplain / parseSpec / cleanTitle / blockText，
  * 全部是 Document → 資料，不碰網路。真實請求會被 Cloudflare 限流、會受代理服務
  * 的可用性影響，拿它當回歸測試等於把外部服務的狀態綁進自己的測試結果裡。
  *
@@ -121,6 +121,23 @@ console.log('\nparseExplain');
   check('沒有 hashtag 時內文仍逐行', n[0].body === '項目一\n項目二', JSON.stringify(n[0].body));
 
   const none = await run(fixture('detail-noexplain.html'), 'parseExplain');
+  eq('#explain 缺席回傳空陣列而非拋錯', none, []);
+}
+
+console.log('\nparseSpec（實際餵給頁面的只有規格那一段）');
+{
+  const s = await run(fixture('detail-full.html'), 'parseSpec');
+  eq('只回一段', s.length, 1);
+  eq('回的是製品仕様', s.map(x => x.heading), ['製品仕様']);
+  check('解説不進來', !JSON.stringify(s).includes('原型制作'), JSON.stringify(s));
+  check('規格內文仍逐行', s[0].body.split('\n')[0] === '塗装済み完成品', JSON.stringify(s[0].body));
+
+  // 這一份沒有 #detail_detail__item_spec，走的是標題比對那條退路
+  const n = await run(fixture('detail-nohash.html'), 'parseSpec');
+  eq('沒有規格 id 時靠標題找得到', n.map(x => x.heading), ['製品仕様']);
+  eq('退路取到的內文正確', n[0].body, '項目一\n項目二');
+
+  const none = await run(fixture('detail-noexplain.html'), 'parseSpec');
   eq('#explain 缺席回傳空陣列而非拋錯', none, []);
 }
 

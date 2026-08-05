@@ -42,33 +42,6 @@
   }
   .wrap { max-width: 1180px; margin: 0 auto; }
 
-  /* ---- 三個工具之間的導覽 ---- */
-  nav.tabs {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 22px;
-    padding: 5px;
-    background: #f6ecd9;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-  }
-  nav.tabs a {
-    flex: 1;
-    padding: 9px 14px;
-    text-align: center;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: var(--fs-lead);
-    font-weight: 600;
-    color: var(--muted);
-    transition: background .12s, color .12s;
-  }
-  nav.tabs a:hover { color: var(--brown); background: #fffaf0; }
-  nav.tabs a[aria-current="page"] {
-    background: #fff;
-    color: var(--brown);
-    box-shadow: 0 1px 2px rgba(107, 57, 6, .12);
-  }
   /* Lucide 圖示以 inline SVG 內嵌，跟著字色走 */
   .ic {
     width: 16px; height: 16px;
@@ -921,20 +894,11 @@
   #undo:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   #undo[hidden] { display: none; }
 
-  /* ---- 商品說明（落點 A：可複製的面板） ---- */
+  /* ---- 商品說明（可複製的面板） ---- */
   #expanel[hidden] { display: none; }
-  #expanel .exphead { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
-  /* .panel h2 是「小標籤」樣式（疏排、大寫、muted），套在日文商品名上會變成
-     一串灰灰的疏排字，所以這一個標題自己來 */
-  #exp-title {
-    flex: 1; min-width: 0;
-    margin: 0;
-    font: 700 var(--fs-action)/1.45 inherit;
-    letter-spacing: normal;
-    text-transform: none;
-    color: var(--brown);
-    word-break: break-word;
-  }
+  /* 面板不放標題——商品名稱在左欄的輸出命名卡上，這裡重複一次只是佔位。
+     剩下的「複製全部」靠右，維持與其他面板一致的動作位置 */
+  #expanel .exphead { display: flex; justify-content: flex-end; margin-bottom: 14px; }
   #exp-copy {
     flex: none;
     padding: 4px 11px;
@@ -947,14 +911,8 @@
   }
   #exp-copy:hover { color: var(--brown); border-color: var(--amber); }
   #exp-copy:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  /* 多商品時區塊之間唯一的界線——面板已經不放商品名稱了 */
   .exp-item + .exp-item { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-  /* 只在有多個商品時才出現——單一商品的名稱已經是面板標題了 */
-  .exp-title {
-    font: 700 var(--fs-lead)/1.5 inherit;
-    color: var(--brown);
-    margin-bottom: 8px;
-  }
-  .exp-sec + .exp-sec { margin-top: 12px; }
   /* 段落標題與內文只差 0.5px 的話等於沒差。改用藥丸標籤，配色沿用清單的
      .badge.warn，不發明新顏色 */
   .exp-h {
@@ -1009,12 +967,6 @@
 </head>
 <body>
 <div class="wrap">
-
-  <nav class="tabs">
-    <a href="studio.html" aria-current="page">遮罩＋套框</a>
-    <a href="index.html">賣場批次套框</a>
-    <a href="censor.html">裸露遮罩</a>
-  </nav>
 
   <header>
     <h1>遮罩＋套框</h1>
@@ -1187,12 +1139,9 @@
         </div>
       </div>
 
-      <!-- 落點 A。落點 B 是 ZIP 內的 .txt，兩者取的是同一份文字 -->
-      <!-- 標題就是商品名稱本身。原本 h2 寫著「商品說明」而真正的商品名稱
-           用跟內文一樣的字級擠在下面，等於把最該一眼看到的東西降級了 -->
+      <!-- 匯入來的規格，唯一的落點：看得到、複製得走。不進 ZIP -->
       <div class="panel" id="expanel" hidden>
         <div class="exphead">
-          <h2 id="exp-title"></h2>
           <button type="button" id="exp-copy">複製全部</button>
         </div>
         <div id="exp-body"></div>
@@ -1230,7 +1179,7 @@
       <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
       <li>左邊可以貼 <b>JANコード</b> 從 amiami 匯入商品圖與說明。匯入會經過 <code>r.jina.ai</code> 與 <code>images.weserv.nl</code> 兩個外部服務——<b>送出的只有這個 JAN 與 amiami 的公開網址，你自己的照片不會被送出</b>。amiami 的圖片不發 CORS 標頭也擋一般請求，不經代理就拿不到位元組，畫到畫布上還會讓輸出直接失敗。</li>
       <li><b>第一次搜尋某個 JAN 可能多花十幾秒</b>：amiami 掛著 Cloudflare，代理第一次抓會先撞上驗證頁，工具會辨識它並自動重抓（最多四次，累計 20 秒），期間顯示「正在通過 amiami 的驗證…」。這與失敗重試是兩回事——限流與錯誤一律不重試。</li>
-      <li>匯入到的<b>商品說明</b>會顯示在右欄，可以「複製全部」，也會一併打包成 <code>.txt</code>，檔名跟著輸出命名走且<b>不佔圖片序號</b>。有說明時即使只輸出一張也會打包成 ZIP，否則那份文字沒地方去。文字是<b>原樣日文</b>，不翻譯。</li>
+      <li>匯入到的<b>商品說明</b>會顯示在右欄，只取商品頁的<b>製品仕様</b>那一段（解説不取），可以「複製全部」。文字是<b>原樣日文</b>，不翻譯；它只出現在畫面上，<b>不會被打包進 ZIP</b>。</li>
       <li>照片全程在瀏覽器內處理，<b>你的照片不會上傳到任何地方</b>；只有 JAN 匯入會對外發出請求，而且送出的不含任何照片。完全不用匯入的話，全程不會有任何對外連線。</li>
       <li>iPhone 的 HEIC 檔請用 <b>Safari</b> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
@@ -1295,7 +1244,6 @@
   const useNameBtn  = document.getElementById('use-name');
   const expanel     = document.getElementById('expanel');
   const expBody     = document.getElementById('exp-body');
-  const expTitle    = document.getElementById('exp-title');
   const expCopy     = document.getElementById('exp-copy');
   const modes    = document.getElementById('modes');
   const modeC    = document.getElementById('mode-censor');
@@ -3181,7 +3129,7 @@
   // 為什麼非得經過兩個外部代理，見 lib/amiami.js 開頭的三道牆。
   // ==========================================================================
 
-  /** 已匯入的商品：{gcode, title, explain}。落點 A（面板）與 B（.txt）共用這一份 */
+  /** 已匯入的商品：{gcode, title, explain}。explain 只有規格那一段，見 lib/amiami.js */
   let products = [];
   let importing = false;
   let lastTitle = '';
@@ -3351,17 +3299,14 @@
     oname.focus();
   });
 
-  /** 落點 A 與落點 B 取的是同一份文字 */
+  /** 面板上看到的與「複製全部」拿到的是同一份文字 */
   function explainText() {
     const withText = products.filter(p => p.explain && p.explain.length);
     if (!withText.length) return '';
-    return withText.map(p => {
-      const head = p.title ? p.title + '\n\n' : '';
-      const body = p.explain
-        .map(s => (s.heading ? s.heading + '\n' : '') + s.body)
-        .join('\n\n');
-      return head + body;
-    }).join('\n\n' + '─'.repeat(24) + '\n\n');
+    return withText.map(p => p.explain
+      .map(s => (s.heading ? s.heading + '\n' : '') + s.body)
+      .join('\n\n')
+    ).join('\n\n' + '─'.repeat(24) + '\n\n');
   }
 
   function renderExplain() {
@@ -3369,23 +3314,9 @@
     if (!products.length) { expanel.hidden = true; return; }
     expanel.hidden = false;
 
-    // 商品名稱就是這個面板的標題，所以只有一個商品時不必在下面再重複一次。
-    // 匯入第二個 JAN 之後標題容不下兩個名字，改講件數，名稱回到各自那一塊上
-    const solo = products.length === 1;
-    expTitle.textContent = solo
-      ? (products[0].title || products[0].gcode)
-      : `${products.length} 件商品的說明`;
-
     for (const p of products) {
       const box = document.createElement('div');
       box.className = 'exp-item';
-
-      if (!solo) {
-        const t = document.createElement('div');
-        t.className = 'exp-title';
-        t.textContent = p.title || p.gcode;
-        box.append(t);
-      }
 
       if (!p.explain.length) {
         const n = document.createElement('div');
@@ -3393,20 +3324,19 @@
         n.textContent = '未取得內文（圖片不受影響）';
         box.append(n);
       } else {
+        // 一個商品現在只會有「製品仕様」一段，但仍照陣列走——挑哪幾段是
+        // lib/amiami.js 的事，這裡不預設它一定只有一個
         for (const s of p.explain) {
-          const sec = document.createElement('div');
-          sec.className = 'exp-sec';
           if (s.heading) {
             const h = document.createElement('div');
             h.className = 'exp-h';
             h.textContent = s.heading;
-            sec.append(h);
+            box.append(h);
           }
           const b = document.createElement('p');
           b.className = 'exp-b';
           b.textContent = s.body;
-          sec.append(b);
-          box.append(sec);
+          box.append(b);
         }
       }
       expBody.append(box);
@@ -3542,32 +3472,22 @@
       }
     }
 
-    // 落點 B：匯入來的商品說明。.txt 不佔圖片序號——plan() 只替可輸出的
-    // 照片編號，這一筆是額外附加的
-    const txt = explainText();
-
+    // ZIP 裡只有圖片。商品說明留在面板上讓人複製——它會被貼進賣場的欄位，
+    // 從 ZIP 裡撈一個 .txt 出來再開起來看反而多繞一圈
     if (!out.length) {
       setStatus('全部輸出失敗', 'err');
-    } else if (out.length === 1 && !txt) {
+    } else if (out.length === 1) {
       // 單張不多包一層 ZIP，也就沒有資料夾
       download(new Blob([out[0].bytes]), out[0].name, 30000);
       setStatus('已下載 1 張' + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
     } else {
-      // 有內文時即使只有 1 張也打包：「不打包」的用意是替使用者省一次解壓，
-      // 而當有第二個檔案要交付時，那個理由就不成立了
       setStatus('打包中…');
       const files = out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes }));
-      if (txt) {
-        files.push({
-          name: folder + '/' + folder + '.txt',
-          bytes: new TextEncoder().encode(txt),
-        });
-      }
       const zip = makeZip(files);
       const zipFile = folder + '.zip';
       download(zip, zipFile, 30000);
       const mb = (zip.size / 1048576).toFixed(1);
-      setStatus(`已打包 ${out.length} 張${txt ? ' ＋ 商品說明' : ''} · ${zipFile}（${mb} MB）` +
+      setStatus(`已打包 ${out.length} 張 · ${zipFile}（${mb} MB）` +
                 (failed ? `，${failed} 張失敗` : ''),
                 failed ? 'err' : 'done');
     }
