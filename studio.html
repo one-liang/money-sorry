@@ -259,6 +259,103 @@
   }
   #oname:focus { outline: 2px solid var(--amber); outline-offset: -1px; border-color: var(--amber); }
 
+  /* ---- 從 JAN 匯入 ---- */
+  #import {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .imphead {
+    margin-bottom: 7px;
+    font-size: var(--fs-meta);
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+  .improw { display: flex; gap: 8px; }
+  #jan {
+    flex: 1; min-width: 0;
+    padding: 9px 12px;
+    font: var(--fs-lead)/1.4 inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  #jan:focus { outline: 2px solid var(--amber); outline-offset: -1px; border-color: var(--amber); }
+  #imp-go {
+    flex: none;
+    padding: 9px 16px;
+    font: 600 var(--fs-body)/1.5 inherit;
+    color: var(--brown);
+    background: var(--amber2);
+    border: 1px solid var(--amber);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  #imp-go:hover:not(:disabled) { filter: brightness(1.04); }
+  #imp-go:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #imp-go:disabled { opacity: .5; cursor: not-allowed; }
+
+  #imp-status { margin-top: 7px; min-height: 17px; font: var(--fs-meta)/1.5 inherit; color: var(--muted); }
+  #imp-status.err  { color: var(--bad); }
+  #imp-status.done { color: var(--ok); font-weight: 600; }
+
+  /* 同一個 JAN 可能對應予約／再販／中古多筆。自動挑一筆的話，
+     使用者要到上架後才會發現拿錯商品——所以一律讓人選 */
+  #imp-picks { margin-top: 8px; display: grid; gap: 6px; }
+  #imp-picks[hidden], #imp-name[hidden], #import[hidden] { display: none; }
+  .pick {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 9px;
+    text-align: left;
+    font: var(--fs-meta)/1.45 inherit;
+    color: var(--ink);
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .pick:hover { border-color: var(--amber); background: #fffaf0; }
+  .pick:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .pick img { width: 34px; height: 34px; flex: none; object-fit: contain; background: #f6ecd9; border-radius: 5px; }
+  .pick.cancel { justify-content: center; color: var(--muted); }
+  .pick .ptag {
+    flex: none;
+    padding: 1px 8px;
+    font: 600 var(--fs-badge)/1.6 inherit;
+    font-style: normal;
+    color: var(--warn);
+    background: #fff6e2;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+  .pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  #imp-name {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: var(--fs-meta)/1.5 inherit;
+    color: var(--muted);
+  }
+  #imp-name .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--note); }
+  #use-name {
+    flex: none;
+    padding: 3px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    color: var(--brown);
+    background: var(--amber2);
+    border: 1px solid var(--amber);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #use-name:hover { filter: brightness(1.04); }
+  #use-name:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+
   /* ---- 一鍵：計數 ＋ 分段點亮 ---- */
   #bulk {
     margin-top: 14px;
@@ -297,7 +394,10 @@
     border-radius: 8px;
   }
   .seg button {
-    padding: 5px 13px;
+    /* 六顆一樣寬，三列的分段控制才會左右對齊——「全不選」比其餘的多一個字。
+       內距收窄讓三個字塞得進 64px；兩個字的仍由 min-width 撐開，外觀不變 */
+    min-width: 64px;
+    padding: 5px 9px;
     font: 600 var(--fs-badge)/1.6 inherit;
     color: var(--muted);
     background: transparent;
@@ -353,6 +453,15 @@
   }
   #list li:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
 
+  /* 未勾選下載：整列退到背景，但檔名與縮圖仍要看得清楚——這不是「停用」，
+     是「這一批不帶它」，隨時會被勾回來。放在 .sel 之後，兩者特異度相同 */
+  #list li.off { background: #faf6ee; }
+  #list li.off.sel { background: #f7efe0; }
+  #list li.off:hover { background: #fdf8ef; }
+  #list li.off .thumb,
+  #list li.off .meta,
+  #list li.off .chips { opacity: .45; }
+
   /* 拖曳中那一列浮起來，其餘用 FLIP 滑開，落點就是它現在停的位置 */
   #list li.dragging {
     position: relative;
@@ -378,6 +487,33 @@
     gap: 7px;
     min-height: 52px;
   }
+
+  /* 「要不要下載」與「怎麼處理」是不同層級的決定，所以用核取方塊而不是
+     第三顆晶片——晶片是直欄排列，加第三顆會把每一列撐高約 29px。
+     這個位置也對：序號就是輸出順序，「會不會有序號」該緊鄰著它 */
+  .pick {
+    position: relative;
+    flex: none;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    padding: 0;
+    background: #fffdf8;
+    border: 1.5px solid #d9c7a6;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  /* 視覺是 20×20，命中區用 ::before 撐到 44×44，比照 .grip 的手法 */
+  .pick::before { content: ''; position: absolute; inset: -12px; }
+  .pick .ic { width: 13px; height: 13px; stroke-width: 3.2; color: transparent; }
+  .pick.on { background: var(--amber); border-color: #d9970f; }
+  .pick.on .ic { color: var(--brown); }
+  .pick:hover:not(:disabled) { border-color: var(--amber); }
+  .pick:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+  .pick:disabled { opacity: .3; cursor: not-allowed; }
 
   .ord {
     flex: none;
@@ -668,6 +804,40 @@
   #undo:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   #undo[hidden] { display: none; }
 
+  /* ---- 商品說明（落點 A：可複製的面板） ---- */
+  /* 右欄兩張白卡之間的距離。沿用 .notes 的 22px，不另外發明數字 */
+  #expanel { margin-top: 22px; }
+  #expanel[hidden] { display: none; }
+  #exp-copy {
+    flex: none;
+    padding: 4px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #exp-copy:hover { color: var(--brown); border-color: var(--amber); }
+  #exp-copy:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .exp-item + .exp-item { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .exp-title {
+    font: 600 var(--fs-body)/1.5 inherit;
+    color: var(--brown);
+    margin-bottom: 8px;
+  }
+  .exp-sec + .exp-sec { margin-top: 10px; }
+  .exp-h { font: 600 var(--fs-meta)/1.6 inherit; color: var(--warn); }
+  /* 日文原樣保留，換行來自原始的 <br>——所以要 pre-wrap */
+  .exp-b {
+    margin: 2px 0 0;
+    font: var(--fs-body)/1.75 inherit;
+    color: var(--note);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .exp-none { font: var(--fs-body)/1.6 inherit; color: var(--bad); }
+
   .notes { margin: 22px 0 0; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
   .notes > summary {
     padding: 11px 18px;
@@ -745,6 +915,24 @@
         </div>
         <input id="picker" type="file" accept="image/*" multiple>
 
+        <!-- 匯入不是另一條入列路徑：拿到的圖片包成 File 之後走的是跟選檔
+             完全相同的 accept()，所以一鍵套框、一鍵遮罩、排序、命名、序號
+             全部原樣適用，不需要為網路來源多開任何分支 -->
+        <div id="import">
+          <div class="imphead">從 JANコード 匯入 amiami 商品</div>
+          <div class="improw">
+            <input id="jan" type="text" inputmode="numeric" placeholder="例如 4570232591424"
+                   autocomplete="off" spellcheck="false" aria-label="JANコード">
+            <button type="button" id="imp-go">匯入</button>
+          </div>
+          <div id="imp-status" aria-live="polite"></div>
+          <div id="imp-picks" hidden></div>
+          <div id="imp-name" hidden>
+            <span class="t"></span>
+            <button type="button" id="use-name">用這個命名</button>
+          </div>
+        </div>
+
         <div id="naming">
           <label for="oname">輸出命名（留白就沿用原檔名）</label>
           <input id="oname" type="text" placeholder="例如：錢錢抱歉" autocomplete="off" spellcheck="false">
@@ -754,6 +942,17 @@
              aria-live 讓一鍵、逐張晶片、追加檔案造成的變動都會被念出來。 -->
         <div id="bulk" aria-live="polite">
           <div class="bulkhead">整批套用</div>
+
+          <!-- 下載排在最前面：它是前置決定（要不要帶這張），另外兩個是
+               「怎麼處理」。分母刻意固定為所有能處理的照片，不跟著勾選縮 -->
+          <div class="bulkrow" role="group" aria-labelledby="lbl-pick">
+            <span class="lbl" id="lbl-pick">下載</span>
+            <span class="count" id="pick-count">—</span>
+            <span class="seg">
+              <button type="button" id="pick-on" disabled>全選</button>
+              <button type="button" id="pick-off" disabled>全不選</button>
+            </span>
+          </div>
 
           <div class="bulkrow" role="group" aria-labelledby="lbl-frame">
             <span class="lbl" id="lbl-frame">套框</span>
@@ -829,6 +1028,14 @@
           <button type="button" id="undo" hidden>復原</button>
         </div>
       </div>
+
+      <!-- 落點 A。落點 B 是 ZIP 內的 .txt，兩者取的是同一份文字 -->
+      <div class="panel" id="expanel" hidden>
+        <h2><span>商品說明</span><span class="fill"></span>
+          <button type="button" id="exp-copy">複製全部</button>
+        </h2>
+        <div id="exp-body"></div>
+      </div>
     </div>
 
   </div>
@@ -852,11 +1059,16 @@
       <li>一鍵區的<b>計數就是目前狀態</b>：全部開會點亮「全開」、全部關會點亮「全關」、混合則兩段都不亮。「含遮罩」只算<b>真的會畫上遮罩</b>的——開了開關卻一個部位都沒抓到的那張不算，並會另外標示出來。</li>
       <li>要留意遮罩的<b>「全關」</b>——它一次撤掉整批的遮罩。按下後狀態列會出現<b>「復原」</b>，復原只是把開關寫回去，已偵測的框都還在，不會重跑偵測。<b>下載按鈕也一直寫著含遮罩的張數</b>，按下之前請看一眼。</li>
       <li><b>輸出命名</b>留白就沿用原檔名；填了之後 ZIP、資料夾與每個檔案都用這個名字，檔案依清單順序編號。ZIP 一律開一層資料夾。</li>
-      <li>每一列最左邊的<b>數字就是輸出順序</b>；數字右邊的<b>六點把手</b>可以上下拖曳排序，序號會即時跟著跳。把手聚焦後按 <kbd>↑</kbd><kbd>↓</kbd> 也能移動。</li>
+      <li>每一列最左邊的<b>核取方塊</b>決定這張要不要下載，預設全部都要。取消的那些會淡化、序號變成「–」，也<b>不佔序號</b>——其餘的會連號重排。一鍵區的「下載」那一列可以全選或全不選。</li>
+      <li>一鍵區的<b>分母固定是「所有能處理的照片」</b>，不會跟著勾選縮。所以你可以先把套框、遮罩整批調好，再回頭決定這次要帶哪幾張；<b>下載按鈕上的張數</b>才是實際會輸出的數量。</li>
+      <li>核取方塊右邊的<b>數字就是輸出順序</b>；數字右邊的<b>六點把手</b>可以上下拖曳排序，序號會即時跟著跳。把手聚焦後按 <kbd>↑</kbd><kbd>↓</kbd> 也能移動。</li>
       <li>再次選檔是<b>加在後面</b>，不會清掉已經調好的東西。要重來請用右上角的「清空」——它會先要你確認，不會自己逾時，按 <kbd>Esc</kbd> 或「取消」都能退出。</li>
       <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
       <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
-      <li>照片全程在瀏覽器內處理，不會上傳到任何地方。</li>
+      <li>左邊可以貼 <b>JANコード</b> 從 amiami 匯入商品圖與說明。匯入會經過 <code>r.jina.ai</code> 與 <code>images.weserv.nl</code> 兩個外部服務——<b>送出的只有這個 JAN 與 amiami 的公開網址，你自己的照片不會被送出</b>。amiami 的圖片不發 CORS 標頭也擋一般請求，不經代理就拿不到位元組，畫到畫布上還會讓輸出直接失敗。</li>
+      <li><b>第一次搜尋某個 JAN 可能多花十幾秒</b>：amiami 掛著 Cloudflare，代理第一次抓會先撞上驗證頁，工具會辨識它並自動重抓（最多四次，累計 20 秒），期間顯示「正在通過 amiami 的驗證…」。這與失敗重試是兩回事——限流與錯誤一律不重試。</li>
+      <li>匯入到的<b>商品說明</b>會顯示在右欄，可以「複製全部」，也會一併打包成 <code>.txt</code>，檔名跟著輸出命名走且<b>不佔圖片序號</b>。有說明時即使只輸出一張也會打包成 ZIP，否則那份文字沒地方去。文字是<b>原樣日文</b>，不翻譯。</li>
+      <li>照片全程在瀏覽器內處理，<b>你的照片不會上傳到任何地方</b>；只有 JAN 匯入會對外發出請求，而且送出的不含任何照片。完全不用匯入的話，全程不會有任何對外連線。</li>
       <li>iPhone 的 HEIC 檔請用 <b>Safari</b> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
   </details>
@@ -864,6 +1076,7 @@
 </div>
 
 <script src="./lib/zip.js"></script>
+<script src="./lib/amiami.js"></script>
 <script>
 (() => {
   'use strict';
@@ -893,12 +1106,15 @@
   const clearText= document.getElementById('clear-text');
   const cancelBtn= document.getElementById('clear-cancel');
   const bulkBtns = {
+    pickOn:   document.getElementById('pick-on'),
+    pickOff:  document.getElementById('pick-off'),
     frameOn:  document.getElementById('frame-on'),
     frameOff: document.getElementById('frame-off'),
     censorOn: document.getElementById('censor-on'),
     censorOff:document.getElementById('censor-off'),
   };
   const bulkCount = {
+    pickOn:   document.getElementById('pick-count'),
     frameOn:  document.getElementById('frame-count'),
     censorOn: document.getElementById('censor-count'),
   };
@@ -906,6 +1122,15 @@
   const bulkEl   = document.getElementById('bulk');
   const noboxEl  = document.getElementById('nobox');
   const undoBtn  = document.getElementById('undo');
+  const janEl       = document.getElementById('jan');
+  const impGo       = document.getElementById('imp-go');
+  const impStatusEl = document.getElementById('imp-status');
+  const picksEl     = document.getElementById('imp-picks');
+  const impNameEl   = document.getElementById('imp-name');
+  const useNameBtn  = document.getElementById('use-name');
+  const expanel     = document.getElementById('expanel');
+  const expBody     = document.getElementById('exp-body');
+  const expCopy     = document.getElementById('exp-copy');
   const modes    = document.getElementById('modes');
   const modeC    = document.getElementById('mode-censor');
   const modeF    = document.getElementById('mode-frame');
@@ -938,6 +1163,7 @@
    * @typedef {Object} Item
    * @property {File} file
    * @property {string} thumbUrl
+   * @property {boolean} pickOn                        要不要下載；預設要
    * @property {boolean} frameOn                       套框開關；預設開
    * @property {boolean} censorOn                      遮罩開關；預設關（模型延遲載入）
    * @property {'pending'|'ready'|'error'} status      解碼狀態
@@ -1546,7 +1772,20 @@
 
   /** 這張會不會被重新編碼；兩個開關都關就是原檔轉存 */
   const processed = it => it.frameOn || it.censorOn;
-  const outputtable = it => it.status === 'ready';
+
+  /**
+   * 兩層述詞，用途不同，混用就會出現互相矛盾的數字：
+   *
+   *   decodable    能不能處理  → 一鍵區的作用域（bulkSet 改誰、syncBulk 的分母）
+   *   outputtable  會不會進 ZIP → 輸出的作用域（plan 的編號、按鈕張數、漏遮警示）
+   *
+   * 一鍵區刻意**不**跟著勾選縮。若跟著縮：取消勾選兩張 → 按「套框全開」（只動到
+   * 其餘的）→ 把那兩張勾回來，它們的套框是關的，但使用者記得自己按過全開；
+   * 而且全不選時兩列會變成「—」且按下去沒有作用。固定分母也讓「先調好再勾選」
+   * 這個順序能正常運作。
+   */
+  const decodable   = it => it.status === 'ready';
+  const outputtable = it => decodable(it) && it.pickOn;
 
   /**
    * 依目前清單順序算出每一筆的輸出名。
@@ -1788,6 +2027,11 @@
 
   function updateDetail(item) {
     if (!item || item.status !== 'ready') { detail.textContent = ''; return; }
+    // 沒勾的話先講這句——否則會有人花十分鐘調一張根本不會輸出的圖
+    if (!item.pickOn) {
+      detail.innerHTML = '<span class="w">這張沒有勾選下載，不會輸出</span>';
+      return;
+    }
     if (!item.censorOn) {
       detail.innerHTML = item.frameOn ? '' : '<span class="w">兩個開關都關：原圖原樣轉存</span>';
       return;
@@ -2117,6 +2361,7 @@
   // 這樣顏色與線寬跟著 .ic 的 CSS 走，不會每個圖示各寫一套。
   const IC = {
     grip:   'M9 12h.01M9 5h.01M9 19h.01M15 12h.01M15 5h.01M15 19h.01',
+    check:  'M20 6 9 17l-5-5',
     frame:  'M22 6H2M22 18H2M6 2v20M18 2v20',
     eyeOff: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'
           + 'M14.084 14.158a3 3 0 0 1-4.242-4.242'
@@ -2163,8 +2408,10 @@
     const ord = [...map.keys()].indexOf(item) + 1;
     item.ordEl.textContent = ord > 0 ? String(ord).padStart(String(map.size).length, '0') : '–';
     item.ordEl.classList.toggle('none', ord <= 0);
+    // 「沒被勾」與「壞掉了」在視覺上都是那個 –，但它們是兩件完全不同的事，
+    // 螢幕閱讀器上必須分得出來
     item.li.setAttribute('aria-label',
-      (ord > 0 ? `第 ${ord} 張，` : '不會輸出，') + item.file.name);
+      (ord > 0 ? `第 ${ord} 張，` : (decodable(item) ? '未勾選下載，' : '不會輸出，')) + item.file.name);
 
     item.dimEl.textContent = (item.file.size / 1024).toFixed(0) + ' KB'
       + (item.measure ? ` · ${item.measure.w}×${item.measure.h}` : '');
@@ -2190,6 +2437,16 @@
       }
     }
     if (item.dup) tags.append(badge('重複', 'warn'));
+    // 沒有這個 badge 的話，未勾選的那一列只剩序號的「–」在說話，
+    // 而檔名 badge 也因為 plan() 不編號它而一起消失了
+    if (!item.pickOn && item.status !== 'error') tags.append(badge('不下載'));
+
+    item.pickEl.classList.toggle('on', item.pickOn);
+    item.pickEl.setAttribute('aria-checked', String(item.pickOn));
+    item.pickEl.setAttribute('aria-label',
+      (item.pickOn ? '取消下載 ' : '選取下載 ') + item.file.name);
+    item.pickEl.disabled = !decodable(item);
+    item.li.classList.toggle('off', !item.pickOn);
 
     item.frameChip.classList.toggle('on', item.frameOn);
     item.censorChip.classList.toggle('on', item.censorOn);
@@ -2212,6 +2469,15 @@
       // li 的 aria-label 已經念過「第 N 張」，否則數字會被念兩次
       const lead = document.createElement('div');
       lead.className = 'lead';
+
+      // 要不要下載。狀態一律由 markRow 從 item.pickOn 同步，不能只在這裡寫死——
+      // 追加檔案與模型載入失敗都會整欄 render() 重建，寫死會讓已取消的勾選復原
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'pick';
+      pick.setAttribute('role', 'checkbox');
+      pick.append(svgIcon(IC.check));
+
       const ord = document.createElement('span');
       ord.className = 'ord';
       ord.setAttribute('aria-hidden', 'true');
@@ -2224,8 +2490,9 @@
       grip.setAttribute('aria-label', '拖曳排序');
       grip.append(svgIcon(IC.grip));
 
-      lead.append(ord, grip);
+      lead.append(pick, ord, grip);
       item.ordEl = ord;
+      item.pickEl = pick;
 
       const img = document.createElement('img');
       img.className = 'thumb';
@@ -2263,6 +2530,7 @@
       list.append(li);
 
       // 點晶片只切開關，不能順便換預覽——那會讓「掃過整欄調開關」變得很煩
+      pick.addEventListener('click', ev => { ev.stopPropagation(); togglePick(item); });
       fc.addEventListener('click', ev => { ev.stopPropagation(); toggleFrame(item); });
       cc.addEventListener('click', ev => { ev.stopPropagation(); toggleCensor(item); });
       grip.addEventListener('click', ev => ev.stopPropagation());
@@ -2440,6 +2708,19 @@
   // 開關
   // ==========================================================================
 
+  /**
+   * 要不要下載。**不清 item.cache**——勾選與否不改變合成結果，
+   * 已經編好的 blob 仍然有效，勾回來時不必重編。
+   */
+  function togglePick(item) {
+    if (!decodable(item)) return;
+    clearUndo();
+    item.pickOn = !item.pickOn;
+    renumber();
+    if (items[selected] === item) syncPreview();
+    updateGo();
+  }
+
   // 切開關會改到副檔名（原圖原樣那格跟著原圖走），所以整欄的名字都要重算
   function toggleFrame(item) {
     clearUndo();
@@ -2467,11 +2748,19 @@
    * 只動**真的需要改變**的項目——無條件重設會把已經編好的 blob 全部丟掉，
    * 30 張 1000×1000 的 JPEG 重編是實打實的成本。
    *
-   * 作用域對齊到 outputtable：計數的分母、輸出按鈕的張數、以及實際被改到的
-   * 項目必須是同一個集合，否則畫面上的數字會互相矛盾。
+   * 作用域一律是 decodable（所有能處理的照片），三列都一樣——**不跟著勾選縮**。
+   * 跟著縮的話，取消勾選兩張再按「套框全開」，那兩張會被跳過；等使用者把它們
+   * 勾回來，套框是關的，但他記得自己按過全開。固定分母也讓「先整批調好、
+   * 再決定這次帶哪幾張」這個順序能正常運作。
+   *
+   * 分兩層看：一鍵區＝decodable，輸出（plan 的編號、按鈕張數、漏遮警示）
+   * ＝outputtable。跨層混用就會出現互相矛盾的數字。
    */
   function bulkSet(key, on, btn) {
-    const changed = items.filter(outputtable).filter(it => it[key] !== on);
+    // 任何一鍵動作都讓上一個復原提議失效——否則「遮罩全關」之後按「套框全開」，
+    // 那顆復原還掛著，看起來像是可以復原套框
+    clearUndo();
+    const changed = items.filter(decodable).filter(it => it[key] !== on);
     if (!changed.length) {
       // 已經在目標狀態。不設 disabled——焦點停在被 disable 的按鈕上會掉回
       // <body>，下一次 Tab 得從頭來過。改用一次回彈表示「有收到，沒事可做」
@@ -2484,7 +2773,8 @@
     const undoable = key === 'censorOn' && !on;
     const snapshot = undoable ? changed.slice() : null;
 
-    for (const it of changed) { it[key] = on; it.cache = null; }
+    // 勾選不改變合成結果，所以那一列不必作廢快取
+    for (const it of changed) { it[key] = on; if (key !== 'pickOn') it.cache = null; }
     if (key === 'frameOn') {
       // 裁切範圍變了，遮罩佔可見區域的比例要跟著重算
       for (const it of changed) {
@@ -2517,24 +2807,29 @@
   const setLit = (btn, on) =>
     on ? btn.setAttribute('data-state', 'lit') : btn.removeAttribute('data-state');
 
+  /** item 的旗標 → 一鍵按鈕的 id 前綴。明確列出來，別再用三元式猜 */
+  const BULK_KEYS = { pickOn: 'pick', frameOn: 'frame', censorOn: 'censor' };
+
   /**
    * 一鍵區的狀態。計數是權威來源，點亮只是視覺冗餘——所以刻意不用
    * aria-pressed：那會宣告「這是可取消的切換鈕」，但按第二次是無操作。
    */
   function syncBulk() {
-    const ready = items.filter(outputtable);
-    const n = ready.length;
+    // 三列共用同一個分母＝所有能處理的照片。勾選只影響輸出，不影響一鍵的作用域
+    const all = items.filter(decodable);
+    const n = all.length;
 
-    for (const key of ['frameOn', 'censorOn']) {
-      const on = ready.filter(it => it[key]).length;
+    for (const key of Object.keys(BULK_KEYS)) {
+      const on = all.filter(it => it[key]).length;
       bulkCount[key].innerHTML = n ? `<b>${on}</b> / ${n} 張` : '—';
-      const base = key === 'frameOn' ? 'frame' : 'censor';
+      const base = BULK_KEYS[key];
       setLit(bulkBtns[base + 'On'],  n > 0 && on === n);
       setLit(bulkBtns[base + 'Off'], n > 0 && on === 0);
     }
 
-    // 開了遮罩、偵測也跑完了，卻一個部位都沒抓到＝輸出時實際上沒有遮罩
-    const zero = ready.filter(it =>
+    // 開了遮罩、偵測也跑完了，卻一個部位都沒抓到＝輸出時實際上沒有遮罩。
+    // 只算真的會輸出的——不下載的那些沒必要警告漏遮
+    const zero = items.filter(outputtable).filter(it =>
       it.censorOn && it.detect === 'done' && !it.boxes.length).length;
     noboxEl.hidden = !zero;
     if (zero) noboxEl.textContent = `⚠ 其中 ${zero} 張沒偵測到任何部位，輸出時不會有遮罩`;
@@ -2561,6 +2856,8 @@
     if (fn) fn();
   });
 
+  bulkBtns.pickOn   .addEventListener('click', ev => bulkSet('pickOn',   true,  ev.currentTarget));
+  bulkBtns.pickOff  .addEventListener('click', ev => bulkSet('pickOn',   false, ev.currentTarget));
   bulkBtns.frameOn  .addEventListener('click', ev => bulkSet('frameOn',  true,  ev.currentTarget));
   bulkBtns.frameOff .addEventListener('click', ev => bulkSet('frameOn',  false, ev.currentTarget));
   bulkBtns.censorOn .addEventListener('click', ev => bulkSet('censorOn', true,  ev.currentTarget));
@@ -2621,7 +2918,10 @@
 
     detecting = false;
     updateGo();
-    const done = items.filter(it => it.censorOn && it.detect === 'done');
+    // 偵測本身刻意不看勾選——跳過不勾的會讓它停在 idle，勾回來時沒有人重跑，
+    // 結果是 censorOn 開著卻一個框都沒有的裸圖。但收尾的統計只報會輸出的，
+    // 否則這裡的張數會跟一鍵區與下載按鈕對不上
+    const done = items.filter(it => outputtable(it) && it.censorOn && it.detect === 'done');
     const zero = done.filter(it => !it.boxes.length).length;
     setStatus(`偵測完成，共 ${done.length} 張` + (zero ? `，其中 ${zero} 張未偵測到任何部位` : ''),
               zero ? 'err' : '');
@@ -2645,6 +2945,7 @@
       const item = {
         file,
         thumbUrl: URL.createObjectURL(file),
+        pickOn: true,
         frameOn: true,
         censorOn: false,
         status: 'pending',
@@ -2660,7 +2961,7 @@
         dup: seen.has(key),
         mode: 'censor',
         cache: null,
-        li: null, dimEl: null, tagsEl: null, frameChip: null, censorChip: null,
+        li: null, dimEl: null, tagsEl: null, pickEl: null, frameChip: null, censorChip: null,
       };
       seen.add(key);
       items.push(item);
@@ -2697,6 +2998,234 @@
     if (items.some(it => it.censorOn)) runDetections();
   }
 
+  // ==========================================================================
+  // 從 JANコード 匯入 amiami 商品
+  //
+  // 三步：搜尋 → 擷取商品頁 → 取圖片位元組。取到的圖片包成 File 之後交給
+  // 上面那個 accept()，於是雙開關、一鍵區、拖曳排序、序號、量測、遮罩偵測、
+  // 四格輸出矩陣全部原樣繼承。
+  //
+  // 這是刻意的：為網路來源另闢一條入列路徑，等於讓每一條既有不變量都多背
+  // 一個例外。「匯入的圖片可以一鍵套框與一鍵遮罩」因此不是新功能，是同構
+  // 帶來的結果。
+  //
+  // 為什麼非得經過兩個外部代理，見 lib/amiami.js 開頭的三道牆。
+  // ==========================================================================
+
+  /** 已匯入的商品：{gcode, title, explain}。落點 A（面板）與 B（.txt）共用這一份 */
+  let products = [];
+  let importing = false;
+  let lastTitle = '';
+
+  const STAGE_LABEL = { search: '搜尋', detail: '擷取商品頁' };
+  const describe = err =>
+    (STAGE_LABEL[err.stage] ? STAGE_LABEL[err.stage] + '失敗：' : '匯入失敗：') + (err.message || err);
+
+  function impStatus(text, cls) {
+    impStatusEl.textContent = text;
+    impStatusEl.className = cls || '';
+  }
+
+  // amiami 掛著 Cloudflare，代理第一次抓某個網址時會先撞上「Just a moment…」，
+  // 要等它在背景通關。這段可能耗上十幾秒，沒有回饋會被當成當掉
+  const waiting = (n, total) => impStatus(`正在通過 amiami 的驗證…（${n} / ${total}）`);
+
+  function setImporting(on) {
+    importing = on;
+    impGo.disabled = on;
+    janEl.disabled = on;
+    impGo.textContent = on ? '匯入中…' : '匯入';
+    updateGo();
+  }
+
+  async function runImport() {
+    if (busy || importing) return;
+    const jan = janEl.value.trim();
+    if (!jan) { impStatus('請先輸入 JANコード', 'err'); janEl.focus(); return; }
+
+    setImporting(true);
+    hidePicks();
+    try {
+      impStatus('搜尋中…');
+      const hits = await MS.amiami.searchByJan(jan, { onWait: waiting });
+      if (!hits.length) { impStatus(`查無 ${jan} 的商品`, 'err'); return; }
+      if (hits.length === 1) { await importProduct(hits[0].gcode); return; }
+      // 同一個 JAN 可能對應予約／再販／中古。自動挑一筆的話，使用者要到
+      // 上架之後才會發現拿錯了商品——所以一律讓人選
+      showPicks(hits);
+      impStatus(`找到 ${hits.length} 筆，請選擇要匯入哪一個`);
+    } catch (err) {
+      impStatus(describe(err), 'err');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function pickProduct(gcode) {
+    if (busy || importing) return;
+    setImporting(true);
+    hidePicks();
+    try { await importProduct(gcode); }
+    catch (err) { impStatus(describe(err), 'err'); }
+    finally { setImporting(false); }
+  }
+
+  /** 呼叫端負責 setImporting 的開關 */
+  async function importProduct(gcode) {
+    impStatus('擷取商品頁…');
+    const p = await MS.amiami.loadProduct(gcode, { onWait: waiting });
+
+    impStatus(`下載圖片 0 / ${p.imageUrls.length}…`);
+    const { files, errors } = await MS.amiami.fetchImages(p.imageUrls, {
+      concurrency: 4,
+      onProgress: (done, total) => impStatus(`下載圖片 ${done} / ${total}…`),
+    });
+    if (!files.length) {
+      throw new Error('圖片全部下載失敗' + (errors[0] ? `（${errors[0].message}）` : ''));
+    }
+
+    // 內文擷取與圖片下載互相獨立——只拿到圖也是有用的結果
+    products.push({ gcode, title: p.title, explain: p.explain });
+    renderExplain();
+    showName(p.title);
+
+    await accept(files);
+
+    const bad    = errors.length ? `，${errors.length} 張失敗` : '';
+    const noText = p.explain.length ? '' : '，未取得內文';
+    impStatus(`已匯入 ${files.length} 張${bad}${noText}`,
+              (errors.length || !p.explain.length) ? 'err' : 'done');
+  }
+
+  function hidePicks() {
+    picksEl.hidden = true;
+    picksEl.innerHTML = '';
+  }
+
+  function showPicks(hits) {
+    picksEl.innerHTML = '';
+    for (const h of hits) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      // 候選縮圖也走代理：直接打 img.amiami.jp 會遇上 Cloudflare 挑戰
+      if (h.thumb) img.src = MS.amiami.weservUrl(h.thumb);
+      const s = document.createElement('span');
+      s.textContent = h.name || h.gcode;
+      b.append(img, s);
+      // 同一件商品常有新品與中古兩筆，名稱一模一樣。不標出來就只能瞎猜
+      const tags = [];
+      if (h.preowned) tags.push('中古');
+      if (h.unavailable && h.status) tags.push(h.status);
+      if (tags.length) {
+        const t = document.createElement('em');
+        t.className = 'ptag';
+        t.textContent = tags.join(' · ');
+        b.append(t);
+      }
+      b.addEventListener('click', () => pickProduct(h.gcode));
+      picksEl.append(b);
+    }
+    // 列了候選卻沒有退路，等於逼使用者一定要挑一個
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'pick cancel';
+    cancel.textContent = '取消';
+    cancel.addEventListener('click', () => { hidePicks(); impStatus(''); });
+    picksEl.append(cancel);
+    picksEl.hidden = false;
+  }
+
+  function showName(title) {
+    lastTitle = title || '';
+    impNameEl.hidden = !lastTitle;
+    if (lastTitle) impNameEl.querySelector('.t').textContent = lastTitle;
+  }
+
+  // 不自動覆蓋——使用者可能已經自己打了名字
+  useNameBtn.addEventListener('click', () => {
+    if (!lastTitle) return;
+    oname.value = sanitize(lastTitle);
+    renumber();
+    oname.focus();
+  });
+
+  /** 落點 A 與落點 B 取的是同一份文字 */
+  function explainText() {
+    const withText = products.filter(p => p.explain && p.explain.length);
+    if (!withText.length) return '';
+    return withText.map(p => {
+      const head = p.title ? p.title + '\n\n' : '';
+      const body = p.explain
+        .map(s => (s.heading ? s.heading + '\n' : '') + s.body)
+        .join('\n\n');
+      return head + body;
+    }).join('\n\n' + '─'.repeat(24) + '\n\n');
+  }
+
+  function renderExplain() {
+    expBody.innerHTML = '';
+    if (!products.length) { expanel.hidden = true; return; }
+    expanel.hidden = false;
+
+    for (const p of products) {
+      const box = document.createElement('div');
+      box.className = 'exp-item';
+
+      const t = document.createElement('div');
+      t.className = 'exp-title';
+      t.textContent = p.title || p.gcode;
+      box.append(t);
+
+      if (!p.explain.length) {
+        const n = document.createElement('div');
+        n.className = 'exp-none';
+        n.textContent = '未取得內文（圖片不受影響）';
+        box.append(n);
+      } else {
+        for (const s of p.explain) {
+          const sec = document.createElement('div');
+          sec.className = 'exp-sec';
+          if (s.heading) {
+            const h = document.createElement('div');
+            h.className = 'exp-h';
+            h.textContent = s.heading;
+            sec.append(h);
+          }
+          const b = document.createElement('p');
+          b.className = 'exp-b';
+          b.textContent = s.body;
+          sec.append(b);
+          box.append(sec);
+        }
+      }
+      expBody.append(box);
+    }
+
+    expCopy.disabled = !explainText();
+  }
+
+  expCopy.addEventListener('click', async () => {
+    const txt = explainText();
+    if (!txt) return;
+    const restore = () => setTimeout(() => { expCopy.textContent = '複製全部'; }, 1400);
+    try {
+      await navigator.clipboard.writeText(txt);
+      expCopy.textContent = '已複製';
+    } catch (err) {
+      expCopy.textContent = '複製失敗';
+    }
+    restore();
+  });
+
+  impGo.addEventListener('click', runImport);
+  janEl.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); runImport(); }
+  });
+
   function clearAll() {
     clearUndo();
     for (const it of items) URL.revokeObjectURL(it.thumbUrl);
@@ -2710,6 +3239,13 @@
     pname.textContent = '';
     detail.textContent = '';
     setStatus('');
+    // 清空是「整個重來」。匯入來的內文屬於那些已經被丟掉的照片，留著只會
+    // 讓下一批輸出莫名其妙夾帶上一個商品的說明
+    products = [];
+    renderExplain();
+    showName('');
+    impStatus('');
+    hidePicks();
     syncPreview();
     updateGo();
   }
@@ -2796,19 +3332,33 @@
       }
     }
 
+    // 落點 B：匯入來的商品說明。.txt 不佔圖片序號——plan() 只替可輸出的
+    // 照片編號，這一筆是額外附加的
+    const txt = explainText();
+
     if (!out.length) {
       setStatus('全部輸出失敗', 'err');
-    } else if (out.length === 1) {
+    } else if (out.length === 1 && !txt) {
       // 單張不多包一層 ZIP，也就沒有資料夾
       download(new Blob([out[0].bytes]), out[0].name, 30000);
       setStatus('已下載 1 張' + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
     } else {
+      // 有內文時即使只有 1 張也打包：「不打包」的用意是替使用者省一次解壓，
+      // 而當有第二個檔案要交付時，那個理由就不成立了
       setStatus('打包中…');
-      const zip = makeZip(out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes })));
+      const files = out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes }));
+      if (txt) {
+        files.push({
+          name: folder + '/' + folder + '.txt',
+          bytes: new TextEncoder().encode(txt),
+        });
+      }
+      const zip = makeZip(files);
       const zipFile = folder + '.zip';
       download(zip, zipFile, 30000);
       const mb = (zip.size / 1048576).toFixed(1);
-      setStatus(`已打包 ${out.length} 張 · ${zipFile}（${mb} MB）` + (failed ? `，${failed} 張失敗` : ''),
+      setStatus(`已打包 ${out.length} 張${txt ? ' ＋ 商品說明' : ''} · ${zipFile}（${mb} MB）` +
+                (failed ? `，${failed} 張失敗` : ''),
                 failed ? 'err' : 'done');
     }
 
@@ -2838,10 +3388,15 @@
     }
     for (const b of Object.values(bulkBtns)) b.disabled = empty;
 
-    go.disabled = busy || detecting || !ready.length;
+    go.disabled = busy || detecting || importing || !ready.length;
     if (!items.length) { go.textContent = '選擇照片'; return; }
+    if (importing)     { go.textContent = '匯入中…'; return; }
     if (detecting)     { go.textContent = '偵測中…'; return; }
-    if (!ready.length) { go.textContent = '沒有可輸出的照片'; return; }
+    // 「一張都沒勾」與「連一張能處理的都沒有」是兩回事，前者一鍵就能救
+    if (!ready.length) {
+      go.textContent = items.some(decodable) ? '未勾選任何照片' : '沒有可輸出的照片';
+      return;
+    }
 
     // 含遮罩張數是下載前的最後一道回饋——一鍵可以把整批關掉，逐張也可能關過頭
     const tail = withCensor ? `（${withCensor} 張含遮罩）` : '';

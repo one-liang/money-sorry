@@ -1,0 +1,30 @@
+<!-- 同一個 JAN 對應多筆（予約／再販／中古），且含重複的 gcode -->
+<div id="search_table">
+  <div class="product_table_list">
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-300001">
+        <img src="https://img.amiami.jp/images/product/thumb300/300/FIGURE-300001.jpg" alt="">
+        <p>測試商品 予約分</p>
+      </a>
+    </div>
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-300002">
+        <img src="https://img.amiami.jp/images/product/thumb300/300/FIGURE-300002.jpg" alt="">
+        <p>測試商品 再販分</p>
+      </a>
+    </div>
+    <!-- 同一個 gcode 再出現一次，去重之後不應變成第四筆 -->
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-300002&amp;rank=dta">
+        <img src="https://img.amiami.jp/images/product/thumb300/300/FIGURE-300002.jpg" alt="">
+        <p>測試商品 再販分</p>
+      </a>
+    </div>
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-300003">
+        <img src="https://img.amiami.jp/images/product/thumb300/300/FIGURE-300003.jpg" alt="">
+        <p>測試商品 中古</p>
+      </a>
+    </div>
+  </div>
+</div>

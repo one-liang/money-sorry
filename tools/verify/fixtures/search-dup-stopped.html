@@ -1,0 +1,35 @@
+<!-- 同一件商品的兩筆上架：現役 ＋ 販売停止中。
+     amiami 自己的搜尋頁預設不列停售的那筆，所以我們也不該列。
+     結構取自實測（JAN 6976195110142），內容為自撰。
+
+     注意 <img> 的 src 是 blank.gif 佔位、真圖在 data-src；名稱要取 .product_name，
+     取整個 <a> 會把「5% 8,770」黏進標籤。 -->
+<div id="search_table">
+  <div class="product_table_list">
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-192119">
+        <div class="product_img">
+          <img src="https://img.amiami.jp/images/product/blank.gif"
+               data-src="https://img.amiami.jp/images/product/thumb300/253/FIGURE-192119.jpg"
+               alt="" width="80" height="80" class="lazyload">
+        </div>
+        <div class="product_icon"><div class="icon_newitem"></div></div>
+        <div class="product_name"><div class="product_name_inner">測試商品 異色版</div></div>
+        <div class="product_off">5%</div>
+        <div class="product_price">8,770</div>
+      </a>
+    </div>
+    <div class="product_box">
+      <a href="https://www.amiami.jp/top/detail/detail?gcode=FIGURE-192119-R">
+        <div class="product_img">
+          <img src="https://img.amiami.jp/images/product/blank.gif"
+               data-src="https://img.amiami.jp/images/product/thumb300/253/FIGURE-192119.jpg"
+               alt="" width="80" height="80" class="lazyload">
+        </div>
+        <div class="product_icon"></div>
+        <div class="product_name"><div class="product_name_inner">測試商品 異色版</div></div>
+        <div class="product_day"><font style="color:#666666;">販売停止中</font></div>
+      </a>
+    </div>
+  </div>
+</div>

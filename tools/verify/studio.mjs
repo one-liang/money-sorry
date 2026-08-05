@@ -107,6 +107,8 @@ const loadInto = async (page, files) => {
 };
 
 const chip = (page, i, which) => page.locator('#list li').nth(i).locator('.chip.' + which);
+const pick = (page, i) => page.locator('#list li').nth(i).locator('.pick');
+const bulkCount = (page, which) => page.locator('#' + which + '-count').innerText();
 
 /** 等偵測跑完；模型首次載入要抓 22MB，給寬一點 */
 const waitDetect = page => page.waitForFunction(
@@ -193,6 +195,13 @@ const run = async () => {
     const heavy = requested.filter(u => /\.onnx$|ort-wasm|ort\.wasm\.min\.js/.test(u));
     check('只套框的流程完全沒下載模型與 runtime', heavy.length === 0,
       heavy.length ? heavy.join(', ') : '0 個請求');
+    // JAN 匯入相依兩個外部服務。沒用到匯入時一個請求都不該送出去——
+    // 這條守的是 README 開頭那句「照片全程留在這台電腦」
+    // blob:／data: 是頁面自己造的物件 URL，不是網路請求
+    const outbound = requested.filter(u =>
+      !/^(blob:|data:)/.test(u) && !/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(u));
+    check('沒用匯入時不對任何外部服務發出請求', outbound.length === 0,
+      outbound.length ? outbound.slice(0, 3).join(', ') : '0 個外部請求');
     check('沒有 JS 例外', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }
@@ -672,6 +681,174 @@ const run = async () => {
       !(await page.locator('#detail').innerText()).includes('未偵測'));
     check('所有遮罩開關退回關閉',
       await page.locator('#list li .chip.censor.on').count() === 0);
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11] 逐張選取要不要下載');
+  {
+    const { ctx, page, errors } = await open(browser, 'studio.html');
+    await loadInto(page, images.slice(0, 3));
+
+    check('預設全部勾選', await page.locator('#list li .pick.on').count() === 3);
+    check('下載計數為 3 / 3', (await bulkCount(page, 'pick')).replace(/\s/g, '') === '3/3張',
+      await bulkCount(page, 'pick'));
+
+    // 取消第 2 張
+    await pick(page, 1).click();
+    await page.waitForTimeout(150);
+
+    check('取消後該列標記為 off', await page.locator('#list li.off').count() === 1);
+    check('取消的那列序號變成「–」',
+      (await page.locator('#list li').nth(1).locator('.ord').innerText()).trim() === '–');
+    check('取消的那列有「不下載」標示',
+      (await page.locator('#list li').nth(1).innerText()).includes('不下載'));
+    check('下載計數變 2 / 3', (await bulkCount(page, 'pick')).replace(/\s/g, '') === '2/3張',
+      await bulkCount(page, 'pick'));
+
+    // 一鍵區的分母固定：不跟著勾選縮
+    check('套框分母不跟著縮（仍為 3）',
+      (await bulkCount(page, 'frame')).replace(/\s/g, '') === '3/3張',
+      await bulkCount(page, 'frame'));
+    check('遮罩分母不跟著縮（仍為 3）',
+      (await bulkCount(page, 'censor')).replace(/\s/g, '') === '0/3張',
+      await bulkCount(page, 'censor'));
+
+    check('下載按鈕只算勾選的',
+      (await page.locator('#go').innerText()).includes('2 張'),
+      await page.locator('#go').innerText());
+
+    // 序號在剩下的兩張上連號重排
+    await page.fill('#oname', '選取');
+    await page.waitForTimeout(200);
+    const got = await grabDownload(page);
+    const entries = readZip(got.bytes);
+    check('未勾選的不進 ZIP 且序號連號',
+      entries.map(e => e.name).join(',') === '選取/選取-1.jpg,選取/選取-2.jpg',
+      entries.map(e => e.name).join(', '));
+    check('沒有 JS 例外', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11b] 一鍵全選與全不選');
+  {
+    const { ctx, page } = await open(browser, 'studio.html');
+    await loadInto(page, images.slice(0, 3));
+
+    await page.click('#pick-off');
+    await page.waitForTimeout(150);
+    check('全不選：三列都變 off', await page.locator('#list li.off').count() === 3);
+    check('全不選：計數為 0 / 3', (await bulkCount(page, 'pick')).replace(/\s/g, '') === '0/3張',
+      await bulkCount(page, 'pick'));
+    check('全不選：輸出按鈕停用', await page.locator('#go').isDisabled());
+    check('全不選：文案是「未勾選」而非「沒有可輸出」',
+      (await page.locator('#go').innerText()).includes('未勾選'),
+      await page.locator('#go').innerText());
+
+    // 一鍵區作用域固定，所以這時仍然可以先把套框調好再勾回來
+    check('全不選後套框分母仍為 3 / 3',
+      (await bulkCount(page, 'frame')).replace(/\s/g, '') === '3/3張',
+      await bulkCount(page, 'frame'));
+    await page.click('#frame-off');
+    await page.waitForTimeout(150);
+    check('全不選後「套框全關」仍然有作用',
+      (await bulkCount(page, 'frame')).replace(/\s/g, '') === '0/3張',
+      await bulkCount(page, 'frame'));
+
+    await page.click('#pick-on');
+    await page.waitForTimeout(150);
+    check('全選：回到 3 / 3', (await bulkCount(page, 'pick')).replace(/\s/g, '') === '3/3張',
+      await bulkCount(page, 'pick'));
+    check('全選：off 標記全部清除', await page.locator('#list li.off').count() === 0);
+    check('全選：剛才調的套框狀態保留（仍為 0 / 3）',
+      (await bulkCount(page, 'frame')).replace(/\s/g, '') === '0/3張',
+      await bulkCount(page, 'frame'));
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11c] 追加檔案不得還原已取消的勾選');
+  {
+    // render() 會整欄重建 <li>，勾選狀態若只在建立時寫死就會被還原
+    const { ctx, page } = await open(browser, 'studio.html');
+    await loadInto(page, images.slice(0, 2));
+    await pick(page, 0).click();
+    await page.waitForTimeout(150);
+    check('取消第 1 張（前提）', await page.locator('#list li.off').count() === 1);
+
+    await page.setInputFiles('#picker', images.slice(2, 4));
+    await page.waitForFunction(() => {
+      const rows = [...document.querySelectorAll('#list li')];
+      return rows.length === 4 && !rows.some(r => r.textContent.includes('讀取中'));
+    }, null, { timeout: 60000 });
+
+    check('追加後仍是 4 張', await page.locator('#list li').count() === 4);
+    check('原本取消的那張仍然是取消的', await page.locator('#list li.off').count() === 1);
+    check('取消的仍是第 1 列', await page.locator('#list li').nth(0).evaluate(el => el.classList.contains('off')));
+    check('新加入的預設勾選', (await bulkCount(page, 'pick')).replace(/\s/g, '') === '3/4張',
+      await bulkCount(page, 'pick'));
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11d] 取消再勾回來，遮罩不能不見');
+  {
+    // 偵測刻意不看勾選。若加了過濾，取消的那張 detect 會停在 idle，
+    // 勾回來時沒有人重跑偵測 → censorOn 開著卻一個框都沒有 ＝ 輸出一張裸圖
+    const { ctx, page } = await open(browser, 'studio.html');
+    await loadInto(page, [one]);
+    await chip(page, 0, 'censor').click();
+    await waitDetect(page);
+    const boxesBefore = await page.locator('#detail').innerText();
+    check('偵測完成且有遮罩（前提）', /\d+ 個遮罩/.test(boxesBefore), boxesBefore);
+
+    await pick(page, 0).click();
+    await page.waitForTimeout(150);
+    check('取消後預覽明講不會輸出',
+      (await page.locator('#detail').innerText()).includes('不會輸出'),
+      await page.locator('#detail').innerText());
+
+    await pick(page, 0).click();
+    await page.waitForTimeout(300);
+    check('勾回來後遮罩框還在',
+      (await page.locator('#detail').innerText()) === boxesBefore,
+      await page.locator('#detail').innerText());
+    check('勾回來後輸出按鈕仍標示含遮罩',
+      (await page.locator('#go').innerText()).includes('含遮罩'),
+      await page.locator('#go').innerText());
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11e] 一鍵動作會撤掉待復原的提議');
+  {
+    const { ctx, page } = await open(browser, 'studio.html');
+    await loadInto(page, images.slice(0, 2));
+    await page.click('#censor-on');
+    await waitDetect(page);
+    await page.click('#censor-off');
+    await page.waitForTimeout(150);
+    check('「遮罩全關」出現復原（前提）', await page.locator('#undo').isVisible());
+
+    await page.click('#pick-off');
+    await page.waitForTimeout(150);
+    check('「下載全不選」撤掉復原提議', !(await page.locator('#undo').isVisible()));
+    check('「下載全不選」自己不提供復原', !(await page.locator('#undo').isVisible()));
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n[11f] 兩段說明已移出面板');
+  {
+    const { ctx, page } = await open(browser, 'studio.html');
+    check('#imp-note 不存在', await page.locator('#imp-note').count() === 0);
+    check('#exp-note 不存在', await page.locator('#exp-note').count() === 0);
+    // details 是收合的，innerText 只拿得到 summary，要用 textContent
+    const notes = await page.locator('details.notes').textContent();
+    check('隱私聲明搬到使用說明', notes.includes('你自己的照片不會被送出'));
+    check('.txt 說明搬到使用說明', notes.includes('.txt'));
+    check('勾選功能寫進使用說明', notes.includes('核取方塊'));
     await ctx.close();
   }
 
