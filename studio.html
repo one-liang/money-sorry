@@ -90,13 +90,35 @@
   }
   .sub { margin: 0; color: var(--muted); font-size: var(--fs-lead); }
 
+  /* minmax(0, …) 不是裝飾：`1fr` 等同 `minmax(auto, 1fr)`，而 auto 的下限是
+     內容的 min-content。清單裡的檔名籤是 nowrap 的，輸出命名一長（「用這個
+     命名」帶進來的商品名常有 40 字以上）就會把整條左欄的下限撐大，兩欄加起來
+     超過 .wrap 的寬度而爆版。改成 0 之後，軌道永遠只拿它該拿的那一份 */
   .grid {
     display: grid;
-    grid-template-columns: 1fr 420px;
+    grid-template-columns: minmax(0, 1fr) 420px;
     gap: 28px;
     align-items: start;
   }
-  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+  /* 清單一長，點最下面那張還得捲回最上面才看得到預覽。讓整個右欄跟著捲。
+     sticky 掛在**右欄本身**（grid item）而不是裡面的預覽面板：掛在內層面板
+     上的話，商品說明是它的靜態兄弟，會被這個定位元素蓋住。
+     grid item 的 sticky 包含區塊是「格線區域」＝整列的高度，所以不必也不能
+     把右欄拉伸（`.grid` 的 align-items: start 正是需要的）。
+     max-height 不能省：面板在 420px 欄寬下約 620px 高，1366×768 的筆電放不下，
+     沒有它「打包下載」會被切在視窗外。用 dvh 而非 vh——手機瀏覽器的網址列
+     會吃掉 vh 算進去的那一段。 */
+  @media (min-width: 961px) {
+    #side {
+      position: sticky;
+      top: 14px;
+      max-height: calc(100dvh - 28px);
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+  }
 
   .panel {
     background: #fff;
@@ -104,6 +126,8 @@
     border-radius: 14px;
     padding: 18px;
   }
+  /* 一張卡＝一個功能群組。同一欄裡的卡片一律用這個間距，兩欄才會對得起來 */
+  .panel + .panel { margin-top: 18px; }
   .panel h2 {
     margin: 0 0 12px;
     display: flex;
@@ -140,10 +164,18 @@
     color: var(--brown);
   }
 
-  /* ---- 模型載入狀態：延遲載入，開了遮罩才出現 ---- */
+  /* ---- 模型載入狀態：延遲載入，開了遮罩才出現 ----
+     這一條原本躺在版面流裡，第一次開遮罩才 display:none → flex，會把整個
+     .grid 往下推一整條的高度。改成 fixed 的浮動列：它本來就不參與版面流，
+     顯隱走 opacity/visibility 而不是 display，版面位移因此歸零。 */
   #model-bar {
-    display: none;
-    margin-bottom: 18px;
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    z-index: 60;
+    display: flex;
+    width: max-content;
+    max-width: min(520px, calc(100vw - 32px));
     padding: 10px 16px;
     border-radius: 10px;
     background: #fff;
@@ -152,8 +184,18 @@
     color: var(--muted);
     align-items: center;
     gap: 10px;
+    box-shadow: 0 10px 30px rgba(107, 57, 6, .18);
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .18s, transform .18s, visibility .18s;
   }
-  #model-bar.show { display: flex; }
+  #model-bar.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) { #model-bar { transition: none; } }
   #model-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
   #model-bar.ready .dot { background: var(--ok); }
   #model-bar.fail  .dot { background: var(--bad); }
@@ -238,10 +280,13 @@
   #clear-cancel[hidden] { display: none; }
 
   /* ---- 輸出命名 ---- */
-  /* 還沒選照片時，這幾塊都是空轉的控制項——藏起來，讓選檔區是唯一的動作 */
-  #naming[hidden], #bulk[hidden], #clear[hidden] { display: none; }
+  /* 還沒選照片時，這幾塊都是空轉的控制項——連同它們所屬的整張卡一起藏起來，
+     讓選檔與匯入是唯一的兩個動作 */
+  #naming[hidden], #bulk[hidden], #clear[hidden],
+  #card-output[hidden], #card-list[hidden] { display: none; }
 
-  #naming { margin-top: 14px; }
+  /* 同一張卡內，商品名稱與命名欄之間的距離；沒有商品名稱時它是第一個元素 */
+  #imp-name:not([hidden]) + #naming { margin-top: 14px; }
   #naming label {
     display: block;
     margin-bottom: 5px;
@@ -259,81 +304,214 @@
   }
   #oname:focus { outline: 2px solid var(--amber); outline-offset: -1px; border-color: var(--amber); }
 
-  /* ---- 一鍵：計數 ＋ 分段點亮 ---- */
-  #bulk {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
+  /* ---- 從 JAN 匯入 ---- */
+  /* 卡片邊界已經在做分區，不再需要自己的 border-top ——留著會變成雙重分隔 */
+  .improw { display: flex; gap: 8px; }
+  #jan {
+    flex: 1; min-width: 0;
+    padding: 9px 12px;
+    font: var(--fs-lead)/1.4 inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
   }
-  .bulkhead {
-    margin-bottom: 7px;
+  #jan:focus { outline: 2px solid var(--amber); outline-offset: -1px; border-color: var(--amber); }
+  /* 匯入區塊的兩顆按鈕（「匯入」與「用這個命名」）性質相同，共用同一套外觀。
+     原本各寫一份，藥丸形與圓角矩形並排看起來像兩種不同層級的控制項 */
+  .btn-amber {
+    flex: none;
+    padding: 9px 16px;
+    font: 600 var(--fs-body)/1.5 inherit;
+    color: var(--brown);
+    background: var(--amber2);
+    border: 1px solid var(--amber);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .btn-amber:hover:not(:disabled) { filter: brightness(1.04); }
+  .btn-amber:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .btn-amber:disabled { opacity: .5; cursor: not-allowed; }
+
+  #imp-status { margin-top: 7px; }
+  #imp-msg { min-height: 17px; font: var(--fs-meta)/1.5 inherit; color: var(--muted); }
+  #imp-msg.err  { color: var(--bad); }
+  #imp-msg.done { color: var(--ok); font-weight: 600; }
+
+  /* 匯入的進度長在按鈕裡。獨立的進度條不管藏得多好，出現的那一刻都會把
+     底下的兩張卡一起往下頂；按鈕本來就佔著這個位置，忙不忙都一樣大。
+     這些規則一律掛在 #imp-go，別污染共用 .btn-amber 的另一顆 */
+  #imp-go {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    /* 「匯入」與「匯入中 ＋ spinner」的內容寬差了 64 vs 98px，沒有 min-width
+       的話旁邊 flex:1 的輸入框會在每次匯入時被擠窄一次——那也是位移。
+       這個值必須**大於忙碌時的內容寬**，兩種狀態才會一樣寬；留一點餘裕
+       給字體不同的機器。[13d] 有一條斷言在守這件事 */
+    min-width: 112px;
+  }
+  #imp-go .spin { display: none; flex: none; width: 13px; height: 13px; }
+  #imp-go.busy .spin {
+    display: block;
+    border: 2px solid rgba(107, 57, 6, .25);
+    border-top-color: var(--brown);
+    border-radius: 50%;
+    animation: imp-spin .7s linear infinite;
+  }
+  @keyframes imp-spin { to { transform: rotate(360deg); } }
+  /* 進度線壓在按鈕內緣底部，用 transform 成長不動 width */
+  #imp-go .ip {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 3px;
+    background: var(--brown2);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .25s ease-out;
+  }
+  /* 比例未知（請求送出去了，還不知道要多久）：來回掃，別假裝知道百分比 */
+  #imp-go.wait .ip { transition: none; animation: imp-sweep 1.2s ease-in-out infinite; }
+  @keyframes imp-sweep {
+    0%   { transform: translateX(-40%) scaleX(.4); }
+    100% { transform: translateX(140%) scaleX(.4); }
+  }
+  /* 忙碌不是停用——別讓整顆褪成半透明，那看起來像壞掉 */
+  #imp-go.busy:disabled { opacity: 1; cursor: progress; }
+  @media (prefers-reduced-motion: reduce) {
+    #imp-go.busy .spin { animation: none; }
+    #imp-go.wait .ip { animation: none; transform: scaleX(.4); }
+    #imp-go .ip { transition: none; }
+  }
+
+  /* 同一個 JAN 可能對應予約／再販／中古多筆。自動挑一筆的話，
+     使用者要到上架後才會發現拿錯商品——所以一律讓人選 */
+  #imp-picks { margin-top: 8px; display: grid; gap: 6px; }
+  #imp-picks[hidden], #imp-name[hidden], #import[hidden] { display: none; }
+  /* 候選清單的 .pick 與清單列的核取方塊同名。全部限定在 #imp-picks 底下，
+     否則字級、間距、文字對齊會漏到每一列的核取方塊上 */
+  #imp-picks .pick {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 9px;
+    text-align: left;
+    font: var(--fs-meta)/1.45 inherit;
+    color: var(--ink);
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  #imp-picks .pick:hover { border-color: var(--amber); background: #fffaf0; }
+  #imp-picks .pick:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  #imp-picks .pick img { width: 34px; height: 34px; flex: none; object-fit: contain; background: #f6ecd9; border-radius: 5px; }
+  #imp-picks .pick.cancel { justify-content: center; color: var(--muted); }
+  #imp-picks .pick .ptag {
+    flex: none;
+    padding: 1px 8px;
+    font: 600 var(--fs-badge)/1.6 inherit;
+    font-style: normal;
+    color: var(--warn);
+    background: #fff6e2;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+  #imp-picks .pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 光有一行商品名稱看不出那是什麼，所以補一行小標題 */
+  #imp-name .k {
+    margin-bottom: 5px;
     font-size: var(--fs-meta);
     letter-spacing: .04em;
     color: var(--muted);
   }
-  .bulkrow { display: flex; align-items: center; gap: 10px; min-height: 34px; }
-  .bulkrow + .bulkrow { margin-top: 8px; }
-  .bulkrow .lbl {
-    flex: none;
-    width: 40px;
-    font: 600 var(--fs-body)/1.5 inherit;
-    color: var(--brown);
+  #imp-name .r { display: flex; align-items: center; gap: 8px; }
+  #imp-name .t {
+    flex: 1; min-width: 0;
+    font: var(--fs-body)/1.5 inherit;
+    color: var(--note);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  /* 計數才是狀態的權威來源，等寬數字讓兩列的分數對齊 */
-  .bulkrow .count {
-    flex: 1;
+
+  /* ---- 一鍵：toggle ＋ 計數 ----
+     原本是「標籤 ⟷ 大片留白 ⟷ 兩顆分段按鈕」的左右對峙，中間那段空白是
+     .count { flex: 1 } 撐出來的。改成 toggle 在左、文字在右，計數當成標籤的
+     說明文字排在下方——三列因此靠左收攏成一塊，不再有橫向的空洞。 */
+  /* 整批套用是「照片清單」卡裡的次級區塊，所以保留自己的小標題但不再畫線 */
+  #bulk { margin-bottom: 4px; }
+  .bulkhead {
+    margin-bottom: 9px;
+    font-size: var(--fs-meta);
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+  .brow { display: flex; align-items: center; gap: 12px; }
+  .brow + .brow { margin-top: 10px; }
+  .btxt { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
+  /* min-width 不是裝飾：三個標籤現在剛好都四個字，靠自然寬度就對齊了，
+     但只要有一個改字數，三列的計數就會參差 */
+  .btxt .lbl { flex: none; min-width: 4.2em; font: 600 var(--fs-body)/1.4 inherit; color: var(--brown); }
+  /* 計數才是狀態的權威來源，等寬數字讓三列的分數上下對齊 */
+  .btxt .count {
     font: var(--fs-meta)/1.5 inherit;
     font-variant-numeric: tabular-nums;
     color: var(--muted);
   }
-  .bulkrow .count b { color: var(--brown); font-weight: 700; }
-  .seg {
-    flex: none;
-    display: flex;
-    gap: 2px;
-    padding: 2px;
-    background: #f6ecd9;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-  }
-  .seg button {
-    padding: 5px 13px;
-    font: 600 var(--fs-badge)/1.6 inherit;
-    color: var(--muted);
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background .12s, color .12s;
-  }
-  .seg button:hover:not(:disabled) { color: var(--brown); background: #fff; }
-  .seg button:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
-  .seg button:disabled { opacity: .4; cursor: not-allowed; }
-  /* 目前就是這個狀態。沿用導覽列與模式列的同一套「白底浮起」語彙 */
-  .seg button[data-state="lit"] {
-    color: var(--brown);
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(107, 57, 6, .14);
-  }
-  /* 已經在目標狀態時不設 disabled（焦點會掉回 body），改用一次回彈表示
-     「有收到，但沒事可做」 */
-  @keyframes bulk-pulse {
-    from { box-shadow: 0 0 0 0 rgba(248, 183, 42, .85); }
-    to   { box-shadow: 0 0 0 7px rgba(248, 183, 42, 0); }
-  }
-  .seg button.pulse { animation: bulk-pulse .35s ease-out; }
-  @media (prefers-reduced-motion: reduce) { .seg button.pulse { animation: none; } }
+  .btxt .count b { color: var(--brown); font-weight: 700; }
 
-  #nobox {
-    margin-top: 5px;
-    padding-left: 50px;
-    font: 600 var(--fs-meta)/1.5 inherit;
-    color: var(--bad);
+  /* role="checkbox" 而不是 switch：ARIA 不允許 switch 用 aria-checked="mixed"，
+     而「部分開啟」在這裡是常態。逐列的 .pick 也是 checkbox，兩者語意一致。 */
+  .tg {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    width: 40px;
+    height: 22px;
+    padding: 0;
+    background: #e6dac2;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .16s;
   }
-  #nobox[hidden] { display: none; }
+  /* 視覺 40×22，命中區用 ::before 撐到 44×44，比照 .pick 與 .grip 的手法 */
+  .tg::before { content: ''; position: absolute; inset: -11px -2px; }
+  .tg i {
+    position: absolute;
+    left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(107, 57, 6, .28);
+    transition: transform .16s;
+  }
+  .tg[aria-checked="true"]  { background: var(--amber); }
+  .tg[aria-checked="true"] i { transform: translateX(18px); }
+  /* 部分開啟：圓鈕停在正中間，軌道用淺一階的琥珀——一眼能跟全開／全關區分 */
+  .tg[aria-checked="mixed"]  { background: var(--amber2); box-shadow: inset 0 0 0 1px var(--amber); }
+  .tg[aria-checked="mixed"] i { transform: translateX(9px); }
+  .tg:hover:not(:disabled) { filter: brightness(1.04); }
+  .tg:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+  .tg:disabled { opacity: .4; cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) { .tg, .tg i { transition: none; } }
 
   /* ---- file list ---- */
-  #list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+  /* 沒指定欄的話這裡是一條「auto」的隱含軌道，也就是由內容決定寬度——
+     檔名籤一長，每一列就跟著超出面板。同 .grid 的理由，把下限釘回 0 */
+  #list {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
   #list li {
     display: flex;
     align-items: center;
@@ -352,6 +530,15 @@
     box-shadow: inset 0 0 0 1px var(--amber);
   }
   #list li:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+
+  /* 未勾選下載：整列退到背景，但檔名與縮圖仍要看得清楚——這不是「停用」，
+     是「這一批不帶它」，隨時會被勾回來。放在 .sel 之後，兩者特異度相同 */
+  #list li.off { background: #faf6ee; }
+  #list li.off.sel { background: #f7efe0; }
+  #list li.off:hover { background: #fdf8ef; }
+  #list li.off .thumb,
+  #list li.off .meta,
+  #list li.off .chips { opacity: .45; }
 
   /* 拖曳中那一列浮起來，其餘用 FLIP 滑開，落點就是它現在停的位置 */
   #list li.dragging {
@@ -375,14 +562,43 @@
     align-self: stretch;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 12px;
     min-height: 52px;
   }
 
+  /* 「要不要下載」與「怎麼處理」是不同層級的決定，所以用核取方塊而不是
+     第三顆晶片——晶片是直欄排列，加第三顆會把每一列撐高約 29px。
+     這個位置也對：序號就是輸出順序，「會不會有序號」該緊鄰著它 */
+  .pick {
+    position: relative;
+    flex: none;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    padding: 0;
+    background: #fffdf8;
+    border: 1.5px solid #d9c7a6;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  /* 視覺是 20×20，命中區用 ::before 撐到 44×44，比照 .grip 的手法 */
+  .pick::before { content: ''; position: absolute; inset: -12px; }
+  .pick .ic { width: 13px; height: 13px; stroke-width: 3.2; color: transparent; }
+  .pick.on { background: var(--amber); border-color: #d9970f; }
+  .pick.on .ic { color: var(--brown); }
+  .pick:hover:not(:disabled) { border-color: var(--amber); }
+  .pick:focus-visible { outline: 2px solid var(--brown2); outline-offset: 2px; }
+  .pick:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* 置中而不是靠右：三件東西的間距由 .lead 的 gap 決定，靠右會讓數字
+     在自己的 26px 裡偏向一側，看起來與把手的距離比與核取方塊的近 */
   .ord {
     flex: none;
     width: 26px;
-    text-align: right;
+    text-align: center;
     font: 700 18px/1.1 inherit;
     font-variant-numeric: tabular-nums;
     letter-spacing: -.02em;
@@ -391,6 +607,7 @@
   }
   .ord.none { color: #bda98a; font-weight: 600; font-size: 15px; }
 
+  /* 與 .pick 同尺寸：兩者都是前導欄裡的控制項，大小不同會讀成不同層級 */
   .grip {
     position: relative;
     flex: none;
@@ -398,8 +615,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 30px;
+    width: 20px;
+    height: 20px;
     padding: 0;
     /* 靜態就有底色：觸控裝置沒有 hover，把手必須在靜止時就看得出是控制項 */
     background: #f2e9d8;
@@ -409,16 +626,15 @@
     touch-action: none;
     transition: background .12s;
   }
-  /* 視覺是一塊 22×30 的小晶片，但命中區用 ::before 撐到約 32×60，
-     面積仍超過 44×44 的下限。
+  /* 視覺是 20×20，命中區用 ::before 撐到 44×44，與 .pick 同一套手法。
      touch-action: none 只留在這裡——整條前導欄都設的話，手機從清單
      左緣往上滑會完全捲不動。 */
-  .grip::before { content: ''; position: absolute; inset: -15px -6px -15px -4px; }
+  .grip::before { content: ''; position: absolute; inset: -12px; }
   .grip:hover { background: var(--amber2); }
   .grip:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   li.sel .grip { background: #f7e2b4; }
   li.dragging .grip { cursor: grabbing; background: var(--amber); }
-  .grip .ic { width: 15px; height: 15px; color: #9c8258; stroke-width: 2.6; }
+  .grip .ic { width: 13px; height: 13px; color: #9c8258; stroke-width: 2.6; }
   .grip:hover .ic, li.dragging .grip .ic { color: var(--brown); }
 
   #list img.thumb {
@@ -439,18 +655,28 @@
     font-size: var(--fs-badge); padding: 2px 8px; border-radius: 999px;
     background: #f2ead9; color: var(--muted); white-space: nowrap;
   }
+  /* 檔名籤是唯一可能很長的那一個。min-width: 0 不能省——flex 項目的自動最小
+     尺寸是 min-content，光給 max-width 壓不住 nowrap 的文字。完整檔名掛在
+     title 上，截斷的是顯示不是資訊 */
+  #list .badge.file {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   #list .badge.ok   { background: #e4f2e9; color: var(--ok); }
   #list .badge.bad  { background: #f8e5e1; color: var(--bad); }
   #list .badge.warn { background: #fdf0da; color: var(--warn); }
 
-  /* 開關晶片：亮＝開、暗＝關 */
+  /* 開關晶片：亮＝開、暗＝關。純文字，不放 icon——兩個字已經說得比圖示清楚，
+     而在這個尺寸下的線稿圖示只是讓晶片變寬 */
   .chips { flex: none; display: flex; flex-direction: column; gap: 4px; }
   .chip {
     display: flex;
     align-items: center;
-    gap: 5px;
-    min-width: 62px;
-    padding: 4px 10px;
+    justify-content: center;
+    min-width: 52px;
+    padding: 4px 12px;
     font: 600 var(--fs-badge)/1.5 inherit;
     color: #b6a389;
     background: #f4eddf;
@@ -459,7 +685,6 @@
     cursor: pointer;
     transition: background .12s, color .12s, border-color .12s;
   }
-  .chip .ic { width: 13px; height: 13px; stroke-width: 2.2; }
   .chip:hover { border-color: var(--line); }
   .chip:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   .chip.on { color: var(--brown); background: var(--amber2); border-color: var(--amber); }
@@ -503,9 +728,12 @@
     place-items: center;
     touch-action: pan-y;
   }
+  /* 游標與 touch-action 拆成兩個 class。合在一起的話，正方形照片在 100%
+     時兩軸的可平移餘裕都是 0，.movable 不成立，游標就停在預設的箭頭上——
+     但這個模式明明是可以拖的（一縮放就有餘裕）。抓手要看模式，不看餘裕。 */
   #stage.movable { touch-action: none; }
-  #stage.movable #pview { cursor: grab; }
-  #stage.movable.grabbing #pview { cursor: grabbing; }
+  #stage.framing #pview { cursor: grab; }
+  #stage.framing.grabbing #pview { cursor: grabbing; }
   /* 編輯遮罩模式：手指歸編輯用，且游標是十字 */
   #stage.censoring { touch-action: none; }
   #stage.censoring #pview { cursor: crosshair; }
@@ -551,15 +779,38 @@
   #stage .hint { color: var(--muted); font-size: var(--fs-body); text-align: center; padding: 0 24px; }
   #stage.has .hint { display: none; }
 
+  /* 沒勾選下載時，整張照片退到背景並掛上標籤。這件事必須在照片本身上說——
+     有人會在一張根本不會輸出的圖上花十分鐘調構圖與遮罩 */
+  #stage.unpicked #pview { opacity: .45; filter: grayscale(.35); }
+  #offtag {
+    position: absolute;
+    top: 10px; left: 10px;
+    z-index: 3;
+    padding: 4px 11px;
+    font: 600 var(--fs-badge)/1.5 inherit;
+    color: var(--brown);
+    background: rgba(255, 253, 248, .94);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 2px 10px rgba(107, 57, 6, .16);
+  }
+  #offtag[hidden] { display: none; }
+
+  /* 浮在照片右下角而不是自己佔一行——那一行原本要跟檔名搶寬度，
+     而檔名現在是圖說，該獨佔一整行並置中 */
   #zoombar {
+    position: absolute;
+    right: 10px; bottom: 10px;
+    z-index: 3;
     display: none;
-    flex: none;
     align-items: center;
     gap: 2px;
     padding: 2px;
-    background: #fffdf8;
+    background: rgba(255, 253, 248, .94);
+    backdrop-filter: blur(6px);
     border: 1px solid var(--line);
     border-radius: 9px;
+    box-shadow: 0 2px 10px rgba(107, 57, 6, .16);
   }
   #zoombar.show { display: flex; }
   #zoombar .zb {
@@ -586,19 +837,17 @@
     color: var(--muted);
   }
 
-  #pbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-    min-height: 30px;
-  }
+  /* 舞台與檔名是一組 figure／figcaption：檔名在說明上面那張圖是誰 */
+  #fig { margin: 0; }
   #pname {
-    flex: 1; min-width: 0;
+    margin-top: 9px;
+    min-height: 18px;
     font-size: var(--fs-meta);
     color: var(--muted);
+    text-align: center;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* 中性的讀數：幾個遮罩、遮蓋多少。警示不放這裡 */
   #detail {
     margin-top: 4px;
     min-height: 17px;
@@ -606,20 +855,24 @@
     color: var(--muted);
     text-align: center;
   }
-  #detail .w { color: var(--warn); font-weight: 600; }
 
-  .editnote {
-    margin-top: 12px;
-    padding: 10px 14px;
+  /* 警示自己一條，有底色有圖示。原本它跟遮罩統計共用同一種淡色小字，
+     「未偵測到任何部位」跟「3 個遮罩」長得一樣，等於沒有警示 */
+  #alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 9px 13px;
     border-radius: 9px;
-    background: #fffaf0;
-    border: 1px solid var(--line);
-    font-size: var(--fs-body);
-    color: var(--note);
-    line-height: 1.7;
+    font: 600 var(--fs-body)/1.6 inherit;
+    color: var(--warn);
+    background: #fdf0da;
+    border: 1px solid #f1d9a8;
   }
-  .editnote b { color: var(--brown); font-weight: 600; }
-  .editnote[hidden] { display: none; }
+  #alert .ic { flex: none; width: 16px; height: 16px; margin-top: 2px; stroke-width: 2.2; }
+  #alert.bad { color: var(--bad); background: #f8e5e1; border-color: #eec7bf; }
+  #alert[hidden] { display: none; }
 
   #go {
     margin-top: 16px;
@@ -668,6 +921,61 @@
   #undo:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   #undo[hidden] { display: none; }
 
+  /* ---- 商品說明（落點 A：可複製的面板） ---- */
+  #expanel[hidden] { display: none; }
+  #expanel .exphead { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  /* .panel h2 是「小標籤」樣式（疏排、大寫、muted），套在日文商品名上會變成
+     一串灰灰的疏排字，所以這一個標題自己來 */
+  #exp-title {
+    flex: 1; min-width: 0;
+    margin: 0;
+    font: 700 var(--fs-action)/1.45 inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--brown);
+    word-break: break-word;
+  }
+  #exp-copy {
+    flex: none;
+    padding: 4px 11px;
+    font: 600 var(--fs-meta)/1.5 inherit;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #exp-copy:hover { color: var(--brown); border-color: var(--amber); }
+  #exp-copy:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .exp-item + .exp-item { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  /* 只在有多個商品時才出現——單一商品的名稱已經是面板標題了 */
+  .exp-title {
+    font: 700 var(--fs-lead)/1.5 inherit;
+    color: var(--brown);
+    margin-bottom: 8px;
+  }
+  .exp-sec + .exp-sec { margin-top: 12px; }
+  /* 段落標題與內文只差 0.5px 的話等於沒差。改用藥丸標籤，配色沿用清單的
+     .badge.warn，不發明新顏色 */
+  .exp-h {
+    display: inline-block;
+    margin-bottom: 4px;
+    padding: 2px 9px;
+    font: 600 var(--fs-badge)/1.6 inherit;
+    color: var(--warn);
+    background: #fdf0da;
+    border-radius: 999px;
+  }
+  /* 日文原樣保留，換行來自原始的 <br>——所以要 pre-wrap */
+  .exp-b {
+    margin: 2px 0 0;
+    font: var(--fs-body)/1.75 inherit;
+    color: var(--note);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .exp-none { font: var(--fs-body)/1.6 inherit; color: var(--bad); }
+
   .notes { margin: 22px 0 0; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
   .notes > summary {
     padding: 11px 18px;
@@ -710,7 +1018,7 @@
 
   <header>
     <h1>遮罩＋套框</h1>
-    <p class="sub">一次選好照片，逐張決定要不要遮、要不要套框，一次打包下載。順序由程式保證，JPEG 只編一次。</p>
+    <p class="sub">一次選好照片，逐張決定要不要遮、要不要套框，一次打包下載。</p>
   </header>
 
   <div id="protocol-gate">
@@ -729,9 +1037,62 @@
 
   <div class="grid">
 
-    <div>
+    <!-- 左欄一張卡＝一個功能群組。原本五個群組擠在同一張大卡裡，分隔線
+         時有時無，看起來是混在一起的一片 -->
+    <div id="main">
+
       <div class="panel">
-        <h2><span>選擇照片</span><span class="fill"></span>
+        <h2>選擇照片</h2>
+        <div id="drop">
+          <strong>點此選擇照片，或直接拖進來</strong>
+          <small>可一次選多張 · 會加在清單後面 · 支援 JPG / PNG / WebP</small>
+        </div>
+        <input id="picker" type="file" accept="image/*" multiple>
+      </div>
+
+      <!-- 匯入不是另一條入列路徑：拿到的圖片包成 File 之後走的是跟選檔
+           完全相同的 accept()，所以一鍵套框、一鍵遮罩、排序、命名、序號
+           全部原樣適用，不需要為網路來源多開任何分支 -->
+      <div class="panel" id="import">
+        <h2>從 JANコード 匯入 amiami 商品</h2>
+        <div class="improw">
+          <input id="jan" type="text" inputmode="numeric" placeholder="例如 4570232591424"
+                 autocomplete="off" spellcheck="false" aria-label="JANコード">
+          <!-- 進度長在按鈕上：按鈕的位置與尺寸本來就固定，忙不忙都不會推到
+               任何東西。獨立的進度條不管藏得多好，出現的那一刻都會把下面頂開 -->
+          <button type="button" id="imp-go" class="btn-amber">
+            <span class="spin" aria-hidden="true"></span>
+            <span class="t">匯入</span>
+            <i class="ip" aria-hidden="true"></i>
+          </button>
+        </div>
+        <!-- 這一行本來就預留了高度，寫什麼都不位移 -->
+        <div id="imp-status" aria-live="polite">
+          <div id="imp-msg"></div>
+        </div>
+        <div id="imp-picks" hidden></div>
+      </div>
+
+      <!-- 匯入到的商品名稱放在這裡而不是匯入區：「用這個命名」寫的就是正
+           下方那個 #oname，因果因此在畫面上看得見 -->
+      <div class="panel" id="card-output" hidden>
+        <h2>輸出設定</h2>
+        <div id="imp-name" hidden>
+          <div class="k">匯入的商品名稱</div>
+          <div class="r">
+            <span class="t"></span>
+            <button type="button" id="use-name" class="btn-amber">用這個命名</button>
+          </div>
+        </div>
+        <div id="naming">
+          <label for="oname">輸出命名（留白就沿用原檔名）</label>
+          <input id="oname" type="text" placeholder="例如：錢錢抱歉" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <!-- 清空歸在這張卡的標題列：它清掉的就是這張卡的內容 -->
+      <div class="panel" id="card-list" hidden>
+        <h2><span>照片清單</span><span class="fill"></span>
           <button type="button" id="clear" disabled>
             <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             <span id="clear-text">清空</span>
@@ -739,51 +1100,50 @@
           <button type="button" id="clear-cancel" hidden>取消</button>
         </h2>
 
-        <div id="drop">
-          <strong>點此選擇照片，或直接拖進來</strong>
-          <small>可一次選多張 · 會加在清單後面 · 支援 JPG / PNG / WebP</small>
-        </div>
-        <input id="picker" type="file" accept="image/*" multiple>
-
-        <div id="naming">
-          <label for="oname">輸出命名（留白就沿用原檔名）</label>
-          <input id="oname" type="text" placeholder="例如：錢錢抱歉" autocomplete="off" spellcheck="false">
-        </div>
-
         <!-- 計數是狀態的權威來源；點亮的那一段只是視覺冗餘。
              aria-live 讓一鍵、逐張晶片、追加檔案造成的變動都會被念出來。 -->
         <div id="bulk" aria-live="polite">
           <div class="bulkhead">整批套用</div>
 
-          <div class="bulkrow" role="group" aria-labelledby="lbl-frame">
-            <span class="lbl" id="lbl-frame">套框</span>
-            <span class="count" id="frame-count">—</span>
-            <span class="seg">
-              <button type="button" id="frame-on" disabled>全開</button>
-              <button type="button" id="frame-off" disabled>全關</button>
+          <!-- 下載排在最前面：它是前置決定（要不要帶這張），另外兩個是
+               「怎麼處理」。分母刻意固定為所有能處理的照片，不跟著勾選縮。
+               計數排在標籤下方當說明，三列因此靠左收成一塊，中間不留空洞 -->
+          <div class="brow">
+            <button type="button" class="tg" id="bulk-pick" role="checkbox"
+                    aria-checked="false" aria-labelledby="lbl-pick" disabled><i></i></button>
+            <span class="btxt">
+              <span class="lbl" id="lbl-pick">全部下載</span>
+              <span class="count" id="pick-count">—</span>
             </span>
           </div>
 
-          <div class="bulkrow" role="group" aria-labelledby="lbl-censor">
-            <span class="lbl" id="lbl-censor">遮罩</span>
-            <span class="count" id="censor-count">—</span>
-            <span class="seg">
-              <button type="button" id="censor-on" disabled>全開</button>
-              <button type="button" id="censor-off" disabled>全關</button>
+          <div class="brow">
+            <button type="button" class="tg" id="bulk-frame" role="checkbox"
+                    aria-checked="false" aria-labelledby="lbl-frame" disabled><i></i></button>
+            <span class="btxt">
+              <span class="lbl" id="lbl-frame">全部套框</span>
+              <span class="count" id="frame-count">—</span>
             </span>
           </div>
 
-          <!-- 「開了遮罩但一個部位都沒抓到」＝實際上沒遮。這句話必須常駐，
-               放進 #status 會被後續的「輸出中 N / M…」蓋掉，下載前就看不到了 -->
-          <div id="nobox" hidden></div>
+          <div class="brow">
+            <button type="button" class="tg" id="bulk-censor" role="checkbox"
+                    aria-checked="false" aria-labelledby="lbl-censor" disabled><i></i></button>
+            <span class="btxt">
+              <span class="lbl" id="lbl-censor">全部遮罩</span>
+              <span class="count" id="censor-count">—</span>
+            </span>
+          </div>
         </div>
 
         <!-- 每個 li 都是 role="option"，容器沒有 listbox 的話那是孤兒角色 -->
         <ul id="list" role="listbox" aria-label="照片清單"></ul>
       </div>
+
     </div>
 
-    <div>
+    <!-- id 是給 sticky 用的：整個右欄要在左邊長清單捲動時留在視野裡 -->
+    <div id="side">
       <div class="panel">
         <h2>預覽與調整</h2>
 
@@ -792,35 +1152,32 @@
           <button type="button" id="mode-frame" aria-pressed="false">調整構圖</button>
         </div>
 
-        <div id="stage">
-          <div id="pview">
-            <!-- 初始給 1x1 透明 GIF：空 src 會讓瀏覽器嘗試載入頁面自身 -->
-            <img id="pphoto" alt="商品照" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
-            <canvas id="pboxes"></canvas>
-            <img id="pframe" alt="外框" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
-            <div id="cropline"></div>
+        <!-- 舞台與檔名是一組 figure／figcaption。縮放列浮在照片右下角，
+             不再跟檔名搶同一行——檔名要獨佔一行置中才讀得出是圖說 -->
+        <figure id="fig">
+          <div id="stage">
+            <div id="pview">
+              <!-- 初始給 1x1 透明 GIF：空 src 會讓瀏覽器嘗試載入頁面自身 -->
+              <img id="pphoto" alt="商品照" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+              <canvas id="pboxes"></canvas>
+              <img id="pframe" alt="外框" draggable="false" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+              <div id="cropline"></div>
+            </div>
+            <div class="hint">尚未選擇照片</div>
+            <span id="offtag" hidden>不下載</span>
+            <div id="zoombar">
+              <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
+              <button type="button" class="zb lvl" id="zlevel" title="回到自動裁切" aria-label="回到自動裁切">100%</button>
+              <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
+            </div>
           </div>
-          <div class="hint">尚未選擇照片</div>
-        </div>
+          <figcaption id="pname"></figcaption>
+        </figure>
 
-        <div id="pbar">
-          <div id="pname"></div>
-          <div id="zoombar">
-            <button type="button" class="zb" id="zout" title="縮小照片" aria-label="縮小照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
-            <button type="button" class="zb lvl" id="zlevel" title="回到自動裁切" aria-label="回到自動裁切">100%</button>
-            <button type="button" class="zb" id="zin" title="放大照片" aria-label="放大照片"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg></button>
-          </div>
-        </div>
+        <!-- 中性讀數（幾個遮罩、遮蓋多少）留在 #detail；需要人動手的警示
+             另外走 #alert，兩者用不同強度說話 -->
         <div id="detail"></div>
-
-        <div class="editnote" id="note-censor" hidden>
-          <b>在圖上拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · <b>拉邊角的白點</b>調整大小 · 選取後按 <b>Delete</b> 刪除<br>
-          虛線黃框是<b>推算</b>的遮罩，位置不對就刪掉。畫面外的暗區<b>會被套框裁掉</b>，但落在那裡的部位仍要遮——構圖隨時可能再拉遠
-        </div>
-        <div class="editnote" id="note-frame" hidden>
-          <b>外框固定不動</b>，拖曳框裡的照片調位置 · <b>滾輪／捏合</b>縮放 · <b>雙擊</b>回到自動裁切<br>
-          這個模式看到的就是輸出。<span id="note-frame-censor" hidden>遮罩在這裡是<b>唯讀</b>的，要改請切回「編輯遮罩」</span>
-        </div>
+        <div id="alert" hidden></div>
 
         <button id="go" disabled>選擇照片</button>
         <!-- aria-live：漏遮警告、失敗訊息與復原提示都走這裡，不能只有視覺 -->
@@ -828,6 +1185,17 @@
           <span id="status"></span>
           <button type="button" id="undo" hidden>復原</button>
         </div>
+      </div>
+
+      <!-- 落點 A。落點 B 是 ZIP 內的 .txt，兩者取的是同一份文字 -->
+      <!-- 標題就是商品名稱本身。原本 h2 寫著「商品說明」而真正的商品名稱
+           用跟內文一樣的字級擠在下面，等於把最該一眼看到的東西降級了 -->
+      <div class="panel" id="expanel" hidden>
+        <div class="exphead">
+          <h2 id="exp-title"></h2>
+          <button type="button" id="exp-copy">複製全部</button>
+        </div>
+        <div id="exp-body"></div>
       </div>
     </div>
 
@@ -849,14 +1217,21 @@
 
     <ul>
       <li>兩個都開時，預覽有<b>兩個模式</b>：「編輯遮罩」看完整原圖，「調整構圖」看實際輸出。遮罩一定要在<b>完整原圖</b>下確認——只在裁切後的畫面裡看過就把構圖拉遠，原本在畫面外沒遮到的部位會跑進輸出。</li>
-      <li>一鍵區的<b>計數就是目前狀態</b>：全部開會點亮「全開」、全部關會點亮「全關」、混合則兩段都不亮。「含遮罩」只算<b>真的會畫上遮罩</b>的——開了開關卻一個部位都沒抓到的那張不算，並會另外標示出來。</li>
-      <li>要留意遮罩的<b>「全關」</b>——它一次撤掉整批的遮罩。按下後狀態列會出現<b>「復原」</b>，復原只是把開關寫回去，已偵測的框都還在，不會重跑偵測。<b>下載按鈕也一直寫著含遮罩的張數</b>，按下之前請看一眼。</li>
+      <li><b>編輯遮罩</b>模式：在圖上<b>拖曳</b>新增遮罩 · <b>點方塊</b>選取後可拖動 · <b>拉邊角的白點</b>調整大小 · 選取後按 <kbd>Delete</kbd> 刪除。虛線黃框是<b>推算</b>的遮罩，位置不對就刪掉。畫面外的暗區<b>會被套框裁掉</b>，但落在那裡的部位仍要遮——構圖隨時可能再拉遠。</li>
+      <li><b>調整構圖</b>模式：<b>外框固定不動</b>，拖曳框裡的照片調位置 · <b>滾輪／捏合</b>縮放 · <b>雙擊</b>回到自動裁切。這個模式看到的就是輸出，而遮罩在這裡是<b>唯讀</b>的，要改請切回「編輯遮罩」。</li>
+      <li>一鍵區的<b>計數就是目前狀態</b>：全部開時開關為開啟、全部關時為關閉、混合時圓鈕停在中間。按下去一律是「全部開啟」，只有在已經全部開啟時才會變成「全部關閉」。「含遮罩」只算<b>真的會畫上遮罩</b>的——開了開關卻一個部位都沒抓到的那張不算，該列會標上紅色的<b>「未偵測」</b>，預覽區也會出示警示。</li>
+      <li>要留意<b>「全部遮罩」的關閉</b>——它一次撤掉整批的遮罩。按下後狀態列會出現<b>「復原」</b>，復原只是把開關寫回去，已偵測的框都還在，不會重跑偵測。<b>下載按鈕也一直寫著含遮罩的張數</b>，按下之前請看一眼。</li>
       <li><b>輸出命名</b>留白就沿用原檔名；填了之後 ZIP、資料夾與每個檔案都用這個名字，檔案依清單順序編號。ZIP 一律開一層資料夾。</li>
-      <li>每一列最左邊的<b>數字就是輸出順序</b>；數字右邊的<b>六點把手</b>可以上下拖曳排序，序號會即時跟著跳。把手聚焦後按 <kbd>↑</kbd><kbd>↓</kbd> 也能移動。</li>
+      <li>每一列最左邊的<b>核取方塊</b>決定這張要不要下載，預設全部都要。取消的那些會淡化、序號變成「–」，也<b>不佔序號</b>——其餘的會連號重排。選到一張沒勾的，預覽區的照片會整張淡化並掛上「不下載」。一鍵區的「全部下載」可以一次全選或全不選。</li>
+      <li>一鍵區的<b>分母固定是「所有能處理的照片」</b>，不會跟著勾選縮。所以你可以先把套框、遮罩整批調好，再回頭決定這次要帶哪幾張；<b>下載按鈕上的張數</b>才是實際會輸出的數量。</li>
+      <li>核取方塊右邊的<b>六點把手</b>可以上下拖曳排序，把手聚焦後按 <kbd>↑</kbd><kbd>↓</kbd> 也能移動；再右邊的<b>數字就是輸出順序</b>，會即時跟著跳。</li>
       <li>再次選檔是<b>加在後面</b>，不會清掉已經調好的東西。要重來請用右上角的「清空」——它會先要你確認，不會自己逾時，按 <kbd>Esc</kbd> 或「取消」都能退出。</li>
       <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
       <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
-      <li>照片全程在瀏覽器內處理，不會上傳到任何地方。</li>
+      <li>左邊可以貼 <b>JANコード</b> 從 amiami 匯入商品圖與說明。匯入會經過 <code>r.jina.ai</code> 與 <code>images.weserv.nl</code> 兩個外部服務——<b>送出的只有這個 JAN 與 amiami 的公開網址，你自己的照片不會被送出</b>。amiami 的圖片不發 CORS 標頭也擋一般請求，不經代理就拿不到位元組，畫到畫布上還會讓輸出直接失敗。</li>
+      <li><b>第一次搜尋某個 JAN 可能多花十幾秒</b>：amiami 掛著 Cloudflare，代理第一次抓會先撞上驗證頁，工具會辨識它並自動重抓（最多四次，累計 20 秒），期間顯示「正在通過 amiami 的驗證…」。這與失敗重試是兩回事——限流與錯誤一律不重試。</li>
+      <li>匯入到的<b>商品說明</b>會顯示在右欄，可以「複製全部」，也會一併打包成 <code>.txt</code>，檔名跟著輸出命名走且<b>不佔圖片序號</b>。有說明時即使只輸出一張也會打包成 ZIP，否則那份文字沒地方去。文字是<b>原樣日文</b>，不翻譯。</li>
+      <li>照片全程在瀏覽器內處理，<b>你的照片不會上傳到任何地方</b>；只有 JAN 匯入會對外發出請求，而且送出的不含任何照片。完全不用匯入的話，全程不會有任何對外連線。</li>
       <li>iPhone 的 HEIC 檔請用 <b>Safari</b> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
   </details>
@@ -864,6 +1239,7 @@
 </div>
 
 <script src="./lib/zip.js"></script>
+<script src="./lib/amiami.js"></script>
 <script>
 (() => {
   'use strict';
@@ -892,20 +1268,35 @@
   const oname    = document.getElementById('oname');
   const clearText= document.getElementById('clear-text');
   const cancelBtn= document.getElementById('clear-cancel');
+  // 一個旗標一顆 toggle。三態（全開／全關／混合）寫在 aria-checked 上，
+  // 按下去讀的也是它——狀態沒有第二份副本
   const bulkBtns = {
-    frameOn:  document.getElementById('frame-on'),
-    frameOff: document.getElementById('frame-off'),
-    censorOn: document.getElementById('censor-on'),
-    censorOff:document.getElementById('censor-off'),
+    pickOn:   document.getElementById('bulk-pick'),
+    frameOn:  document.getElementById('bulk-frame'),
+    censorOn: document.getElementById('bulk-censor'),
   };
   const bulkCount = {
+    pickOn:   document.getElementById('pick-count'),
     frameOn:  document.getElementById('frame-count'),
     censorOn: document.getElementById('censor-count'),
   };
-  const namingEl = document.getElementById('naming');
+  const namingEl  = document.getElementById('naming');
+  const cardOutput= document.getElementById('card-output');
+  const cardList  = document.getElementById('card-list');
   const bulkEl   = document.getElementById('bulk');
-  const noboxEl  = document.getElementById('nobox');
   const undoBtn  = document.getElementById('undo');
+  const janEl       = document.getElementById('jan');
+  const impGo       = document.getElementById('imp-go');
+  const impGoLabel  = impGo.querySelector('.t');
+  const impGoBar    = impGo.querySelector('.ip');
+  const impMsgEl    = document.getElementById('imp-msg');
+  const picksEl     = document.getElementById('imp-picks');
+  const impNameEl   = document.getElementById('imp-name');
+  const useNameBtn  = document.getElementById('use-name');
+  const expanel     = document.getElementById('expanel');
+  const expBody     = document.getElementById('exp-body');
+  const expTitle    = document.getElementById('exp-title');
+  const expCopy     = document.getElementById('exp-copy');
   const modes    = document.getElementById('modes');
   const modeC    = document.getElementById('mode-censor');
   const modeF    = document.getElementById('mode-frame');
@@ -918,13 +1309,12 @@
   const hint     = stage.querySelector('.hint');
   const pname    = document.getElementById('pname');
   const detail   = document.getElementById('detail');
+  const alertEl  = document.getElementById('alert');
+  const offtag   = document.getElementById('offtag');
   const zoombar  = document.getElementById('zoombar');
   const zin      = document.getElementById('zin');
   const zout     = document.getElementById('zout');
   const zlevel   = document.getElementById('zlevel');
-  const noteC    = document.getElementById('note-censor');
-  const noteF    = document.getElementById('note-frame');
-  const noteFC   = document.getElementById('note-frame-censor');
   const go       = document.getElementById('go');
   const statusEl = document.getElementById('status');
   const gate     = document.getElementById('protocol-gate');
@@ -938,6 +1328,7 @@
    * @typedef {Object} Item
    * @property {File} file
    * @property {string} thumbUrl
+   * @property {boolean} pickOn                        要不要下載；預設要
    * @property {boolean} frameOn                       套框開關；預設開
    * @property {boolean} censorOn                      遮罩開關；預設關（模型延遲載入）
    * @property {'pending'|'ready'|'error'} status      解碼狀態
@@ -1287,6 +1678,9 @@
         modelBar.classList.remove('loading');
         modelBar.classList.add('ready');
         modelMsg.textContent = '偵測模型已就緒';
+        // 就緒是一次性的好消息，講完就收。ready 這個 class 留著——它是
+        // 「模型可用」的狀態，不是那條列子的可見性
+        setTimeout(() => modelBar.classList.remove('show'), 4000);
       } catch (err) {
         modelBar.classList.remove('loading');
         modelBar.classList.add('fail');
@@ -1546,7 +1940,20 @@
 
   /** 這張會不會被重新編碼；兩個開關都關就是原檔轉存 */
   const processed = it => it.frameOn || it.censorOn;
-  const outputtable = it => it.status === 'ready';
+
+  /**
+   * 兩層述詞，用途不同，混用就會出現互相矛盾的數字：
+   *
+   *   decodable    能不能處理  → 一鍵區的作用域（bulkSet 改誰、syncBulk 的分母）
+   *   outputtable  會不會進 ZIP → 輸出的作用域（plan 的編號、按鈕張數）
+   *
+   * 一鍵區刻意**不**跟著勾選縮。若跟著縮：取消勾選兩張 → 按「套框全開」（只動到
+   * 其餘的）→ 把那兩張勾回來，它們的套框是關的，但使用者記得自己按過全開；
+   * 而且全不選時兩列會變成「—」且按下去沒有作用。固定分母也讓「先調好再勾選」
+   * 這個順序能正常運作。
+   */
+  const decodable   = it => it.status === 'ready';
+  const outputtable = it => decodable(it) && it.pickOn;
 
   /**
    * 依目前清單順序算出每一筆的輸出名。
@@ -1617,6 +2024,9 @@
     zlevel.disabled = !canZoom || !item.moved;
     zout.disabled = !canZoom || z <= ZOOM_MIN + 1e-3;
     zin.disabled  = !canZoom || z >= ZOOM_MAX - 1e-3;
+    // 抓手看模式，touch-action 看餘裕。正方形照片在 100% 時兩軸的餘裕都是 0，
+    // 綁在一起會讓一個明明拖得動（一縮放就有餘裕）的模式顯示成預設箭頭
+    stage.classList.toggle('framing', !!canZoom);
     stage.classList.toggle('movable', !!canZoom && (range.x > 0.5 || range.y > 0.5));
   }
 
@@ -1735,11 +2145,6 @@
     stage.classList.toggle('noframe', m !== 'frame');
     stage.classList.toggle('willcrop', m === 'censor' && !!item && item.frameOn);
 
-    noteC.hidden = m !== 'censor';
-    noteF.hidden = m !== 'frame';
-    // 遮罩根本沒開的時候，別在構圖說明裡提「遮罩是唯讀的」——那是雜訊
-    noteFC.hidden = !both;
-
     syncControls(current());
     if (current()) layout(current());
     updateDetail(item);
@@ -1748,10 +2153,12 @@
   async function drawPreview() {
     const token = ++previewToken;
     const item = selected >= 0 ? items[selected] : null;
+    // 讀數、警示、未勾選標示三者一律經由 updateDetail 一起寫，這裡不各清各的——
+    // 手動只清 detail 會讓上一張的警示留在畫面上，而它看起來完全像是這一張的
     if (!item) {
       stage.classList.remove('has');
       pname.textContent = '';
-      detail.textContent = '';
+      updateDetail(null);
       syncPreview();
       return;
     }
@@ -1761,14 +2168,14 @@
     if (item.status === 'error') {
       stage.classList.remove('has', 'busy');
       hint.textContent = item.file.name + '：' + item.error;
-      detail.textContent = '';
+      updateDetail(item);
       syncPreview();
       return;
     }
     if (item.status === 'pending' || !item.measure) {
       stage.classList.remove('has', 'busy');
       hint.textContent = '讀取中…';
-      detail.textContent = '';
+      updateDetail(item);
       return;
     }
 
@@ -1786,14 +2193,39 @@
     syncPreview();
   }
 
+  /**
+   * 預覽區的三個落點，強度由弱到強：
+   *   #detail          中性讀數（幾個遮罩、遮蓋多少）
+   *   #alert           需要人動手看一眼的警示，有底色有圖示
+   *   #stage.unpicked  這張根本不會輸出——講在照片本身上
+   *
+   * 三者一定要在同一個函式裡一起寫，而且每條路徑都得把另外兩個歸零；
+   * 少清一個就會留下上一張的警示，而它看起來完全像是這一張的。
+   */
+  function setAlert(text, bad) {
+    alertEl.hidden = !text;
+    alertEl.classList.toggle('bad', !!bad);
+    alertEl.textContent = '';
+    if (!text) return;
+    alertEl.append(svgIcon(IC.alert), document.createTextNode(text));
+  }
+
   function updateDetail(item) {
-    if (!item || item.status !== 'ready') { detail.textContent = ''; return; }
+    const picked = !!item && item.pickOn;
+    stage.classList.toggle('unpicked', !!item && item.status === 'ready' && !picked);
+    offtag.hidden = !(item && item.status === 'ready' && !picked);
+
+    if (!item || item.status !== 'ready') { detail.textContent = ''; setAlert(''); return; }
+    // 沒勾的話就到此為止——遮罩統計對一張不會輸出的圖沒有意義，
+    // 而「不下載」已經寫在照片上了，不必再開一條警示
+    if (!picked) { detail.textContent = ''; setAlert(''); return; }
     if (!item.censorOn) {
-      detail.innerHTML = item.frameOn ? '' : '<span class="w">兩個開關都關：原圖原樣轉存</span>';
+      detail.textContent = '';
+      setAlert(item.frameOn ? '' : '兩個開關都關：這張會原圖原樣轉存');
       return;
     }
-    if (item.detect === 'busy') { detail.textContent = '偵測中…'; return; }
-    if (item.detect !== 'done') { detail.textContent = ''; return; }
+    if (item.detect === 'busy') { detail.textContent = '偵測中…'; setAlert(''); return; }
+    if (item.detect !== 'done') { detail.textContent = ''; setAlert(''); return; }
 
     const n = item.boxes.length;
     const inf = item.boxes.filter(b => b.inferred).length;
@@ -1801,11 +2233,15 @@
       BREAST: '胸', GENITALIA: '私處', BUTTOCKS: '臀', ANUS: '臀',
     }[b.part] || '其他')))].join('、');
 
-    let html = n ? `${n} 個遮罩（${parts}）· 遮蓋 ${(item.areaPct * 100).toFixed(1)}%` : '';
-    if (inf) html += `　含 ${inf} 個推算`;
-    if (!n) html = '<span class="w">未偵測到任何部位，請人工確認</span>';
-    else if (item.areaPct > AREA_WARN) html += '　<span class="w">遮蓋過多，這張可能不能用</span>';
-    detail.innerHTML = html;
+    if (!n) {
+      detail.textContent = '';
+      setAlert('未偵測到任何部位，這張輸出時不會有遮罩，請人工確認', true);
+      return;
+    }
+    let text = `${n} 個遮罩（${parts}）· 遮蓋 ${(item.areaPct * 100).toFixed(1)}%`;
+    if (inf) text += `　含 ${inf} 個推算`;
+    detail.textContent = text;
+    setAlert(item.areaPct > AREA_WARN ? '遮蓋過多，這張可能不能用' : '');
   }
 
   // ==========================================================================
@@ -2117,11 +2553,9 @@
   // 這樣顏色與線寬跟著 .ic 的 CSS 走，不會每個圖示各寫一套。
   const IC = {
     grip:   'M9 12h.01M9 5h.01M9 19h.01M15 12h.01M15 5h.01M15 19h.01',
-    frame:  'M22 6H2M22 18H2M6 2v20M18 2v20',
-    eyeOff: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'
-          + 'M14.084 14.158a3 3 0 0 1-4.242-4.242'
-          + 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143'
-          + 'M2 2l20 20',
+    check:  'M20 6 9 17l-5-5',
+    alert:  'M12 9v4M12 17h.01'
+          + 'M10.363 3.591 2.257 17.125a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636-2.87L13.637 3.59a1.914 1.914 0 0 0-3.274 0z',
   };
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -2163,15 +2597,18 @@
     const ord = [...map.keys()].indexOf(item) + 1;
     item.ordEl.textContent = ord > 0 ? String(ord).padStart(String(map.size).length, '0') : '–';
     item.ordEl.classList.toggle('none', ord <= 0);
+    // 「沒被勾」與「壞掉了」在視覺上都是那個 –，但它們是兩件完全不同的事，
+    // 螢幕閱讀器上必須分得出來
     item.li.setAttribute('aria-label',
-      (ord > 0 ? `第 ${ord} 張，` : '不會輸出，') + item.file.name);
+      (ord > 0 ? `第 ${ord} 張，` : (decodable(item) ? '未勾選下載，' : '不會輸出，')) + item.file.name);
 
     item.dimEl.textContent = (item.file.size / 1024).toFixed(0) + ' KB'
       + (item.measure ? ` · ${item.measure.w}×${item.measure.h}` : '');
 
     const tags = item.tagsEl;
     tags.innerHTML = '';
-    if (mine) tags.append(badge(mine));
+    // 檔名可能被截斷顯示，完整值掛 title
+    if (mine) { const b = badge(mine, 'file'); b.title = mine; tags.append(b); }
     if (item.status === 'pending') tags.append(badge('讀取中'));
     else if (item.status === 'error') tags.append(badge(item.error, 'bad'));
     else {
@@ -2190,6 +2627,16 @@
       }
     }
     if (item.dup) tags.append(badge('重複', 'warn'));
+    // 沒有這個 badge 的話，未勾選的那一列只剩序號的「–」在說話，
+    // 而檔名 badge 也因為 plan() 不編號它而一起消失了
+    if (!item.pickOn && item.status !== 'error') tags.append(badge('不下載'));
+
+    item.pickEl.classList.toggle('on', item.pickOn);
+    item.pickEl.setAttribute('aria-checked', String(item.pickOn));
+    item.pickEl.setAttribute('aria-label',
+      (item.pickOn ? '取消下載 ' : '選取下載 ') + item.file.name);
+    item.pickEl.disabled = !decodable(item);
+    item.li.classList.toggle('off', !item.pickOn);
 
     item.frameChip.classList.toggle('on', item.frameOn);
     item.censorChip.classList.toggle('on', item.censorOn);
@@ -2212,6 +2659,15 @@
       // li 的 aria-label 已經念過「第 N 張」，否則數字會被念兩次
       const lead = document.createElement('div');
       lead.className = 'lead';
+
+      // 要不要下載。狀態一律由 markRow 從 item.pickOn 同步，不能只在這裡寫死——
+      // 追加檔案與模型載入失敗都會整欄 render() 重建，寫死會讓已取消的勾選復原
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'pick';
+      pick.setAttribute('role', 'checkbox');
+      pick.append(svgIcon(IC.check));
+
       const ord = document.createElement('span');
       ord.className = 'ord';
       ord.setAttribute('aria-hidden', 'true');
@@ -2224,8 +2680,11 @@
       grip.setAttribute('aria-label', '拖曳排序');
       grip.append(svgIcon(IC.grip));
 
-      lead.append(ord, grip);
+      // 把手緊鄰核取方塊（兩者都是控制項、同尺寸），序號排最後靠著縮圖——
+      // 它是唯讀讀數，不該被夾在兩顆按鈕中間
+      lead.append(pick, grip, ord);
       item.ordEl = ord;
+      item.pickEl = pick;
 
       const img = document.createElement('img');
       img.className = 'thumb';
@@ -2250,11 +2709,11 @@
       const fc = document.createElement('button');
       fc.type = 'button';
       fc.className = 'chip frame';
-      fc.append(svgIcon(IC.frame), document.createTextNode('套框'));
+      fc.textContent = '套框';
       const cc = document.createElement('button');
       cc.type = 'button';
       cc.className = 'chip censor';
-      cc.append(svgIcon(IC.eyeOff), document.createTextNode('遮罩'));
+      cc.textContent = '遮罩';
       chips.append(fc, cc);
       item.frameChip = fc;
       item.censorChip = cc;
@@ -2263,6 +2722,7 @@
       list.append(li);
 
       // 點晶片只切開關，不能順便換預覽——那會讓「掃過整欄調開關」變得很煩
+      pick.addEventListener('click', ev => { ev.stopPropagation(); togglePick(item); });
       fc.addEventListener('click', ev => { ev.stopPropagation(); toggleFrame(item); });
       cc.addEventListener('click', ev => { ev.stopPropagation(); toggleCensor(item); });
       grip.addEventListener('click', ev => ev.stopPropagation());
@@ -2440,6 +2900,19 @@
   // 開關
   // ==========================================================================
 
+  /**
+   * 要不要下載。**不清 item.cache**——勾選與否不改變合成結果，
+   * 已經編好的 blob 仍然有效，勾回來時不必重編。
+   */
+  function togglePick(item) {
+    if (!decodable(item)) return;
+    clearUndo();
+    item.pickOn = !item.pickOn;
+    renumber();
+    if (items[selected] === item) syncPreview();
+    updateGo();
+  }
+
   // 切開關會改到副檔名（原圖原樣那格跟著原圖走），所以整欄的名字都要重算
   function toggleFrame(item) {
     clearUndo();
@@ -2467,24 +2940,28 @@
    * 只動**真的需要改變**的項目——無條件重設會把已經編好的 blob 全部丟掉，
    * 30 張 1000×1000 的 JPEG 重編是實打實的成本。
    *
-   * 作用域對齊到 outputtable：計數的分母、輸出按鈕的張數、以及實際被改到的
-   * 項目必須是同一個集合，否則畫面上的數字會互相矛盾。
+   * 作用域一律是 decodable（所有能處理的照片），三列都一樣——**不跟著勾選縮**。
+   * 跟著縮的話，取消勾選兩張再按「套框全開」，那兩張會被跳過；等使用者把它們
+   * 勾回來，套框是關的，但他記得自己按過全開。固定分母也讓「先整批調好、
+   * 再決定這次帶哪幾張」這個順序能正常運作。
+   *
+   * 分兩層看：一鍵區＝decodable，輸出（plan 的編號、按鈕張數）＝outputtable。
+   * 跨層混用就會出現互相矛盾的數字。
    */
-  function bulkSet(key, on, btn) {
-    const changed = items.filter(outputtable).filter(it => it[key] !== on);
-    if (!changed.length) {
-      // 已經在目標狀態。不設 disabled——焦點停在被 disable 的按鈕上會掉回
-      // <body>，下一次 Tab 得從頭來過。改用一次回彈表示「有收到，沒事可做」
-      pulse(btn);
-      return;
-    }
+  function bulkSet(key, on) {
+    // 任何一鍵動作都讓上一個復原提議失效——否則關掉「全部遮罩」之後再開
+    // 「全部套框」，那顆復原還掛著，看起來像是可以復原套框
+    clearUndo();
+    const changed = items.filter(decodable).filter(it => it[key] !== on);
+    if (!changed.length) return;
 
-    // 遮罩全關是四顆按鈕裡唯一可能造成漏遮的，留一條回頭路。
+    // 關掉「全部遮罩」是三顆 toggle 裡唯一可能造成漏遮的，留一條回頭路。
     // boxes 與 detect 都沒被動到，所以復原只是把旗標寫回去，不會重跑偵測。
     const undoable = key === 'censorOn' && !on;
     const snapshot = undoable ? changed.slice() : null;
 
-    for (const it of changed) { it[key] = on; it.cache = null; }
+    // 勾選不改變合成結果，所以那一列不必作廢快取
+    for (const it of changed) { it[key] = on; if (key !== 'pickOn') it.cache = null; }
     if (key === 'frameOn') {
       // 裁切範圍變了，遮罩佔可見區域的比例要跟著重算
       for (const it of changed) {
@@ -2507,40 +2984,26 @@
     if (key === 'censorOn' && on) runDetections();
   }
 
-  function pulse(btn) {
-    if (!btn) return;
-    btn.classList.remove('pulse');
-    void btn.offsetWidth;                 // 強制重排，同一顆連按才會每次都跳
-    btn.classList.add('pulse');
-  }
-
-  const setLit = (btn, on) =>
-    on ? btn.setAttribute('data-state', 'lit') : btn.removeAttribute('data-state');
-
   /**
-   * 一鍵區的狀態。計數是權威來源，點亮只是視覺冗餘——所以刻意不用
-   * aria-pressed：那會宣告「這是可取消的切換鈕」，但按第二次是無操作。
+   * 一鍵區的狀態。計數仍是權威來源，toggle 的三態是它的視覺形式。
+   *
+   * 用 role="checkbox" 而不是 switch：ARIA 不允許 switch 使用
+   * aria-checked="mixed"，而「部分開啟」在這裡是常態而非例外。
    */
   function syncBulk() {
-    const ready = items.filter(outputtable);
-    const n = ready.length;
+    // 三列共用同一個分母＝所有能處理的照片。勾選只影響輸出，不影響一鍵的作用域
+    const all = items.filter(decodable);
+    const n = all.length;
 
-    for (const key of ['frameOn', 'censorOn']) {
-      const on = ready.filter(it => it[key]).length;
+    for (const key of Object.keys(bulkCount)) {
+      const on = all.filter(it => it[key]).length;
       bulkCount[key].innerHTML = n ? `<b>${on}</b> / ${n} 張` : '—';
-      const base = key === 'frameOn' ? 'frame' : 'censor';
-      setLit(bulkBtns[base + 'On'],  n > 0 && on === n);
-      setLit(bulkBtns[base + 'Off'], n > 0 && on === 0);
+      bulkBtns[key].setAttribute('aria-checked',
+        n === 0 || on === 0 ? 'false' : on === n ? 'true' : 'mixed');
     }
-
-    // 開了遮罩、偵測也跑完了，卻一個部位都沒抓到＝輸出時實際上沒有遮罩
-    const zero = ready.filter(it =>
-      it.censorOn && it.detect === 'done' && !it.boxes.length).length;
-    noboxEl.hidden = !zero;
-    if (zero) noboxEl.textContent = `⚠ 其中 ${zero} 張沒偵測到任何部位，輸出時不會有遮罩`;
   }
 
-  // ---- 復原：只有「遮罩全關」用得到 ----
+  // ---- 復原：只有關掉「全部遮罩」用得到 ----
 
   let pendingUndo = null;
 
@@ -2561,10 +3024,13 @@
     if (fn) fn();
   });
 
-  bulkBtns.frameOn  .addEventListener('click', ev => bulkSet('frameOn',  true,  ev.currentTarget));
-  bulkBtns.frameOff .addEventListener('click', ev => bulkSet('frameOn',  false, ev.currentTarget));
-  bulkBtns.censorOn .addEventListener('click', ev => bulkSet('censorOn', true,  ev.currentTarget));
-  bulkBtns.censorOff.addEventListener('click', ev => bulkSet('censorOn', false, ev.currentTarget));
+  // 三態 → 兩態：只有「已經全開」才會關掉，全關與混合一律開啟。這是「全選」
+  // 核取方塊的標準語意，也讓原本「按第二次是無操作」的顧慮消失——每一次按下
+  // 都真的改變了什麼
+  for (const key of Object.keys(bulkBtns)) {
+    bulkBtns[key].addEventListener('click', ev =>
+      bulkSet(key, ev.currentTarget.getAttribute('aria-checked') !== 'true'));
+  }
 
   // ==========================================================================
   // 偵測排程：只跑開了遮罩、而且還沒偵測過的那幾張
@@ -2621,7 +3087,10 @@
 
     detecting = false;
     updateGo();
-    const done = items.filter(it => it.censorOn && it.detect === 'done');
+    // 偵測本身刻意不看勾選——跳過不勾的會讓它停在 idle，勾回來時沒有人重跑，
+    // 結果是 censorOn 開著卻一個框都沒有的裸圖。但收尾的統計只報會輸出的，
+    // 否則這裡的張數會跟一鍵區與下載按鈕對不上
+    const done = items.filter(it => outputtable(it) && it.censorOn && it.detect === 'done');
     const zero = done.filter(it => !it.boxes.length).length;
     setStatus(`偵測完成，共 ${done.length} 張` + (zero ? `，其中 ${zero} 張未偵測到任何部位` : ''),
               zero ? 'err' : '');
@@ -2645,6 +3114,7 @@
       const item = {
         file,
         thumbUrl: URL.createObjectURL(file),
+        pickOn: true,
         frameOn: true,
         censorOn: false,
         status: 'pending',
@@ -2660,7 +3130,7 @@
         dup: seen.has(key),
         mode: 'censor',
         cache: null,
-        li: null, dimEl: null, tagsEl: null, frameChip: null, censorChip: null,
+        li: null, dimEl: null, tagsEl: null, pickEl: null, frameChip: null, censorChip: null,
       };
       seen.add(key);
       items.push(item);
@@ -2697,6 +3167,272 @@
     if (items.some(it => it.censorOn)) runDetections();
   }
 
+  // ==========================================================================
+  // 從 JANコード 匯入 amiami 商品
+  //
+  // 三步：搜尋 → 擷取商品頁 → 取圖片位元組。取到的圖片包成 File 之後交給
+  // 上面那個 accept()，於是雙開關、一鍵區、拖曳排序、序號、量測、遮罩偵測、
+  // 四格輸出矩陣全部原樣繼承。
+  //
+  // 這是刻意的：為網路來源另闢一條入列路徑，等於讓每一條既有不變量都多背
+  // 一個例外。「匯入的圖片可以一鍵套框與一鍵遮罩」因此不是新功能，是同構
+  // 帶來的結果。
+  //
+  // 為什麼非得經過兩個外部代理，見 lib/amiami.js 開頭的三道牆。
+  // ==========================================================================
+
+  /** 已匯入的商品：{gcode, title, explain}。落點 A（面板）與 B（.txt）共用這一份 */
+  let products = [];
+  let importing = false;
+  let lastTitle = '';
+
+  const STAGE_LABEL = { search: '搜尋', detail: '擷取商品頁' };
+  const describe = err =>
+    (STAGE_LABEL[err.stage] ? STAGE_LABEL[err.stage] + '失敗：' : '匯入失敗：') + (err.message || err);
+
+  function impStatus(text, cls) {
+    impMsgEl.textContent = text;
+    impMsgEl.className = cls || '';
+  }
+
+  // ---- 匯入進度：按鈕底部的那條線 ----
+
+  // 三個步驟在同一條線上各自的區間。圖片佔一半——它是實際最花時間的那一段
+  const PHASE = { search: [0, .25], detail: [.25, .5], images: [.5, 1] };
+
+  /** ratio 為 null＝請求送出去了但不知道要多久，改成來回掃而不是編一個百分比 */
+  function prog(step, ratio) {
+    const [a, b] = PHASE[step];
+    const wait = ratio == null;
+    impGo.classList.toggle('wait', wait);
+    if (!wait) {
+      const v = a + (b - a) * Math.max(0, Math.min(1, ratio));
+      impGoBar.style.transform = `scaleX(${v.toFixed(3)})`;
+    }
+  }
+
+  // amiami 掛著 Cloudflare，代理第一次抓某個網址時會先撞上「Just a moment…」，
+  // 要等它在背景通關。這段可能耗上十幾秒，沒有回饋會被當成當掉。
+  // 每一段各自知道自己是誰，所以由呼叫端把 step 綁進去
+  const waiting = step => (n, total) => { prog(step, n / total); impStatus(`通過驗證 ${n} / ${total}`); };
+
+  /** 忙／不忙的唯一開關；不忙時順手把進度線歸位 */
+  function setImporting(on) {
+    importing = on;
+    impGo.disabled = on;
+    janEl.disabled = on;
+    impGo.classList.toggle('busy', on);
+    impGoLabel.textContent = on ? '匯入中' : '匯入';
+    if (!on) {
+      impGo.classList.remove('wait');
+      impGoBar.style.transform = 'scaleX(0)';
+    }
+    updateGo();
+  }
+
+  async function runImport() {
+    if (busy || importing) return;
+    const jan = janEl.value.trim();
+    if (!jan) { impStatus('請先輸入 JANコード', 'err'); janEl.focus(); return; }
+
+    setImporting(true);
+    hidePicks();
+    try {
+      impStatus('搜尋中');
+      prog('search', null);
+      const hits = await MS.amiami.searchByJan(jan, { onWait: waiting('search') });
+      if (!hits.length) { impStatus(`查無 ${jan} 的商品`, 'err'); return; }
+      if (hits.length === 1) { await importProduct(hits[0].gcode); return; }
+      // 同一個 JAN 可能對應予約／再販／中古。自動挑一筆的話，使用者要到
+      // 上架之後才會發現拿錯了商品——所以一律讓人選
+      showPicks(hits);
+      impStatus(`找到 ${hits.length} 筆，請選擇要匯入哪一個`);
+    } catch (err) {
+      impStatus(describe(err), 'err');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function pickProduct(gcode) {
+    if (busy || importing) return;
+    setImporting(true);
+    hidePicks();
+    try { await importProduct(gcode); }
+    catch (err) { impStatus(describe(err), 'err'); }
+    finally { setImporting(false); }
+  }
+
+  /** 呼叫端負責 setImporting 的開關 */
+  async function importProduct(gcode) {
+    impStatus('擷取商品頁');
+    prog('detail', null);
+    const p = await MS.amiami.loadProduct(gcode, { onWait: waiting('detail') });
+
+    prog('images', 0);
+    impStatus(`0 / ${p.imageUrls.length}`);
+    const { files, errors } = await MS.amiami.fetchImages(p.imageUrls, {
+      concurrency: 4,
+      onProgress: (done, total) => { prog('images', done / total); impStatus(`${done} / ${total}`); },
+    });
+    if (!files.length) {
+      throw new Error('圖片全部下載失敗' + (errors[0] ? `（${errors[0].message}）` : ''));
+    }
+
+    // 內文擷取與圖片下載互相獨立——只拿到圖也是有用的結果
+    products.push({ gcode, title: p.title, explain: p.explain });
+    renderExplain();
+    showName(p.title);
+
+    await accept(files);
+
+    const bad    = errors.length ? `，${errors.length} 張失敗` : '';
+    const noText = p.explain.length ? '' : '，未取得內文';
+    const partial = errors.length || !p.explain.length;
+    impStatus(`已匯入 ${files.length} 張${bad}${noText}`, partial ? 'err' : 'done');
+  }
+
+  function hidePicks() {
+    picksEl.hidden = true;
+    picksEl.innerHTML = '';
+  }
+
+  function showPicks(hits) {
+    picksEl.innerHTML = '';
+    for (const h of hits) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      // 候選縮圖也走代理：直接打 img.amiami.jp 會遇上 Cloudflare 挑戰
+      if (h.thumb) img.src = MS.amiami.weservUrl(h.thumb);
+      const s = document.createElement('span');
+      s.textContent = h.name || h.gcode;
+      b.append(img, s);
+      // 同一件商品常有新品與中古兩筆，名稱一模一樣。不標出來就只能瞎猜
+      const tags = [];
+      if (h.preowned) tags.push('中古');
+      if (h.unavailable && h.status) tags.push(h.status);
+      if (tags.length) {
+        const t = document.createElement('em');
+        t.className = 'ptag';
+        t.textContent = tags.join(' · ');
+        b.append(t);
+      }
+      b.addEventListener('click', () => pickProduct(h.gcode));
+      picksEl.append(b);
+    }
+    // 列了候選卻沒有退路，等於逼使用者一定要挑一個
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'pick cancel';
+    cancel.textContent = '取消';
+    cancel.addEventListener('click', () => { hidePicks(); impStatus(''); });
+    picksEl.append(cancel);
+    picksEl.hidden = false;
+  }
+
+  function showName(title) {
+    lastTitle = title || '';
+    impNameEl.hidden = !lastTitle;
+    if (lastTitle) impNameEl.querySelector('.t').textContent = lastTitle;
+    // 它所屬的那張卡的可見性由 updateGo 統一決定——這裡不呼叫的話，
+    // 匯入拿到名稱時卡片不會跟著打開
+    updateGo();
+  }
+
+  // 不自動覆蓋——使用者可能已經自己打了名字
+  useNameBtn.addEventListener('click', () => {
+    if (!lastTitle) return;
+    oname.value = sanitize(lastTitle);
+    renumber();
+    oname.focus();
+  });
+
+  /** 落點 A 與落點 B 取的是同一份文字 */
+  function explainText() {
+    const withText = products.filter(p => p.explain && p.explain.length);
+    if (!withText.length) return '';
+    return withText.map(p => {
+      const head = p.title ? p.title + '\n\n' : '';
+      const body = p.explain
+        .map(s => (s.heading ? s.heading + '\n' : '') + s.body)
+        .join('\n\n');
+      return head + body;
+    }).join('\n\n' + '─'.repeat(24) + '\n\n');
+  }
+
+  function renderExplain() {
+    expBody.innerHTML = '';
+    if (!products.length) { expanel.hidden = true; return; }
+    expanel.hidden = false;
+
+    // 商品名稱就是這個面板的標題，所以只有一個商品時不必在下面再重複一次。
+    // 匯入第二個 JAN 之後標題容不下兩個名字，改講件數，名稱回到各自那一塊上
+    const solo = products.length === 1;
+    expTitle.textContent = solo
+      ? (products[0].title || products[0].gcode)
+      : `${products.length} 件商品的說明`;
+
+    for (const p of products) {
+      const box = document.createElement('div');
+      box.className = 'exp-item';
+
+      if (!solo) {
+        const t = document.createElement('div');
+        t.className = 'exp-title';
+        t.textContent = p.title || p.gcode;
+        box.append(t);
+      }
+
+      if (!p.explain.length) {
+        const n = document.createElement('div');
+        n.className = 'exp-none';
+        n.textContent = '未取得內文（圖片不受影響）';
+        box.append(n);
+      } else {
+        for (const s of p.explain) {
+          const sec = document.createElement('div');
+          sec.className = 'exp-sec';
+          if (s.heading) {
+            const h = document.createElement('div');
+            h.className = 'exp-h';
+            h.textContent = s.heading;
+            sec.append(h);
+          }
+          const b = document.createElement('p');
+          b.className = 'exp-b';
+          b.textContent = s.body;
+          sec.append(b);
+          box.append(sec);
+        }
+      }
+      expBody.append(box);
+    }
+
+    expCopy.disabled = !explainText();
+  }
+
+  expCopy.addEventListener('click', async () => {
+    const txt = explainText();
+    if (!txt) return;
+    const restore = () => setTimeout(() => { expCopy.textContent = '複製全部'; }, 1400);
+    try {
+      await navigator.clipboard.writeText(txt);
+      expCopy.textContent = '已複製';
+    } catch (err) {
+      expCopy.textContent = '複製失敗';
+    }
+    restore();
+  });
+
+  impGo.addEventListener('click', runImport);
+  janEl.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); runImport(); }
+  });
+
   function clearAll() {
     clearUndo();
     for (const it of items) URL.revokeObjectURL(it.thumbUrl);
@@ -2705,11 +3441,21 @@
     selectedBox = null;
     previewToken++;
     list.innerHTML = '';
-    stage.classList.remove('has', 'busy', 'movable', 'grabbing');
+    stage.classList.remove('has', 'busy', 'movable', 'framing', 'grabbing');
     hint.textContent = '尚未選擇照片';
     pname.textContent = '';
-    detail.textContent = '';
+    updateDetail(null);
     setStatus('');
+    // 清空是整個重來，JAN 也一起——留著上一個商品的號碼只會在下一次匯入時
+    // 讓人以為那是自己剛貼的
+    janEl.value = '';
+    // 清空是「整個重來」。匯入來的內文屬於那些已經被丟掉的照片，留著只會
+    // 讓下一批輸出莫名其妙夾帶上一個商品的說明
+    products = [];
+    renderExplain();
+    showName('');
+    impStatus('');
+    hidePicks();
     syncPreview();
     updateGo();
   }
@@ -2796,19 +3542,33 @@
       }
     }
 
+    // 落點 B：匯入來的商品說明。.txt 不佔圖片序號——plan() 只替可輸出的
+    // 照片編號，這一筆是額外附加的
+    const txt = explainText();
+
     if (!out.length) {
       setStatus('全部輸出失敗', 'err');
-    } else if (out.length === 1) {
+    } else if (out.length === 1 && !txt) {
       // 單張不多包一層 ZIP，也就沒有資料夾
       download(new Blob([out[0].bytes]), out[0].name, 30000);
       setStatus('已下載 1 張' + (failed ? `，${failed} 張失敗` : ''), failed ? 'err' : 'done');
     } else {
+      // 有內文時即使只有 1 張也打包：「不打包」的用意是替使用者省一次解壓，
+      // 而當有第二個檔案要交付時，那個理由就不成立了
       setStatus('打包中…');
-      const zip = makeZip(out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes })));
+      const files = out.map(e => ({ name: folder + '/' + e.name, bytes: e.bytes }));
+      if (txt) {
+        files.push({
+          name: folder + '/' + folder + '.txt',
+          bytes: new TextEncoder().encode(txt),
+        });
+      }
+      const zip = makeZip(files);
       const zipFile = folder + '.zip';
       download(zip, zipFile, 30000);
       const mb = (zip.size / 1048576).toFixed(1);
-      setStatus(`已打包 ${out.length} 張 · ${zipFile}（${mb} MB）` + (failed ? `，${failed} 張失敗` : ''),
+      setStatus(`已打包 ${out.length} 張${txt ? ' ＋ 商品說明' : ''} · ${zipFile}（${mb} MB）` +
+                (failed ? `，${failed} 張失敗` : ''),
                 failed ? 'err' : 'done');
     }
 
@@ -2825,11 +3585,15 @@
     syncBulk();
 
     // 沒照片時整批套用、輸出命名、清空都無事可做。與其擺一排停用的控制項，
-    // 不如整塊收起來，讓選檔區是這一欄唯一的動作
+    // 不如連同它們所屬的整張卡收起來，讓選檔與匯入是這一欄唯一的兩個動作
     const empty = !items.length;
     namingEl.hidden = empty;
     bulkEl.hidden = empty;
     clearBtn.hidden = empty;
+    cardList.hidden = empty;
+    // 匯入拿到了商品名稱但一張圖都沒成功時，那個名稱仍然有用（可以拿去命名），
+    // 所以這張卡的條件是「兩個內容都空」而不是「沒照片」
+    cardOutput.hidden = namingEl.hidden && impNameEl.hidden;
     if (empty) cancelBtn.hidden = true;
 
     clearBtn.disabled = empty;
@@ -2838,10 +3602,15 @@
     }
     for (const b of Object.values(bulkBtns)) b.disabled = empty;
 
-    go.disabled = busy || detecting || !ready.length;
+    go.disabled = busy || detecting || importing || !ready.length;
     if (!items.length) { go.textContent = '選擇照片'; return; }
+    if (importing)     { go.textContent = '匯入中…'; return; }
     if (detecting)     { go.textContent = '偵測中…'; return; }
-    if (!ready.length) { go.textContent = '沒有可輸出的照片'; return; }
+    // 「一張都沒勾」與「連一張能處理的都沒有」是兩回事，前者一鍵就能救
+    if (!ready.length) {
+      go.textContent = items.some(decodable) ? '未勾選任何照片' : '沒有可輸出的照片';
+      return;
+    }
 
     // 含遮罩張數是下載前的最後一道回饋——一鍵可以把整批關掉，逐張也可能關過頭
     const tail = withCensor ? `（${withCensor} 張含遮罩）` : '';
