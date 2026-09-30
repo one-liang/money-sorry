@@ -20,7 +20,8 @@ cd tools/verify && npm install && npx playwright install chromium-headless-shell
 node tools/verify/studio.mjs           # 整合頁；含三個逐位元不變量
 node tools/verify/censor.mjs           # 遮罩頁
 node tools/verify/preview-adjust.mjs   # index.html 的手動構圖調整；基準取自 git tag v1.2.0
-node tools/verify/amiami.mjs           # JAN 匯入的解析純函式，離線、只用 fixtures/
+node tools/verify/amiami.mjs           # JAN 匯入的解析純函式與備援流程，離線、只用 fixtures/
+node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weserv，不需 test/
 ```
 
 - 驗證腳本會自己起靜態 server（各自固定 port），不需要先跑 `serve.cmd`。
@@ -68,9 +69,11 @@ node tools/verify/amiami.mjs           # JAN 匯入的解析純函式，離線�
 
 經兩個外部代理：`r.jina.ai`（穿過 amiami 的 Cloudflare）與 `images.weserv.nl`（補 CORS，避免 canvas 被汙染）。要點：
 
-- 解析函式（`parseSearch` / `parseProduct` / `parseSpec` …）是 **Document → 資料的純函式**，才能用 `tools/verify/fixtures/` 的自撰樣本離線驗證。新增解析規則時要加對應的 fixture 與檢查。
-- Cloudflare 驗證頁（「Just a moment…」）要辨識並重試，否則會被誤判成「查無商品」；限流與錯誤**不重試**，圖片下載完全不重試。
-- 失敗一律拋出帶 `stage` 的錯誤讓 UI 明確呈現，不可靜默回傳空結果。
+- jina **一律用預設的 markdown 格式**，不可送 `x-return-format: html`——實測 html 格式對未抓過的網址只拿得到驗證頁，markdown 第一次就成功（依據見 `amiami-markdown-fetch` 的 design.md）。
+- 解析函式（`classify` / `parseSearch` / `parseProduct` / `parseSpec` …）是 **markdown 字串 → 資料的純函式**，靠顯示文字當錨點（`の検索結果(N 件)`、`製品仕様`…），才能用 `tools/verify/fixtures/` 的自撰樣本離線驗證。錨點缺席時**拋錯，不可回傳零筆**（會變成假的「查無商品」）。新增解析規則時要加對應的 fixture 與檢查。
+- 三站備援 jp → amiami.com/eng → /cn，站別集中定義在 `SITES`。搜尋在任一站成功後，商品頁**永遠先回 jp**（gcode 三站共用，只有 jp 規格是日文原文）；圖片、名稱、規格取自同一頁；備援站規格不翻譯、UI 要標示來源。com 的 fixture 是推定樣本（撰寫當下 com 後端被擋）。
+- Cloudflare 驗證頁要辨識；同站短重抓一次後換站。**代理本身**限流／5xx／連不上時直接停止、不換站；限流與錯誤不重試，圖片下載完全不重試。
+- 失敗一律拋出帶 `stage` 與 `site`（`jp`/`eng`/`cn`/`proxy`/`all`）的錯誤讓 UI 明確呈現，全站失敗帶逐站 `attempts`，不可靜默回傳空結果。
 - 同商品多筆上架時依**狀態**（販売停止中／中古）篩選，不可依 `gcode` 的 `-R` 尾碼判斷。
 - 除了 JAN 與 amiami 公開網址，任何使用者資料都不得離開瀏覽器。
 
