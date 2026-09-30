@@ -57,4 +57,4 @@
 - 5.5：本機沒有 `test/`，改以 12 張合成圖執行 `studio.mjs`。三個逐位元不變量全數 ✓；另有 6 項「需要偵測到遮罩部位」的前提檢查失敗，在 `develop` 的乾淨 worktree 以同一批圖執行得到**完全相同**的 6 項失敗，確認與本變更無關（合成圖沒有人體）。`censor.mjs` 同理 1 項（「有產生遮罩」）。
 - 6.2：`CLAUDE.md` 仍出現 `x-return-format` 字樣，是「不可送出」的規則敘述，非用法。
 - 1.5：英文站未能以 Chrome 實看——amiami.com 依使用者的語言 cookie 自動導向 `/cn/`，切換語言會動到使用者設定，故未做；英文站的標籤文字為推定值，已在 fixture 檔頭註明。
-- 7.2 待部署後執行。
+- 7.2 封存時尚未完成：`release/1.6.0` 合併進 `main` 並推送（`9af4830`）後，GitHub 沒有觸發 `pages-build-deployment`（Actions 只有到 #6／`f0c90f2`，Pages 設定正常、githubstatus 無事故）。改為封存後隨 `v1.6.0` 的推送觸發部署，再於 Pages 上驗證；結果記在 release 說明與後續 commit。
