@@ -2,24 +2,31 @@
 
 ## Purpose
 TBD - created by archiving change add-jan-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: 由 JAN 代碼匯入商品素材
 
 `studio.html` SHALL 提供一個 JANコード 輸入入口。輸入後工具依序完成三件事：以該 JAN 於 amiami 搜尋出商品、擷取商品頁的圖片與內文、將圖片以位元組形式加入清單。
 
-由於需要跨網域取得資料，此功能 MUST 透過外部代理服務：頁面內容經 `r.jina.ai`（以 `x-return-format: html` 取得 HTML），圖片位元組經 `images.weserv.nl`。工具 MUST NOT 直接對 `amiami.jp` 或 `img.amiami.jp` 發出請求——該路徑已確認被 CORS 與 Cloudflare 雙重阻擋，且取得的圖片會汙染 canvas 而使 `toBlob` 失敗。
+由於需要跨網域取得資料，此功能 MUST 透過外部代理服務：頁面內容經 `r.jina.ai`，以其**預設的 markdown 格式**取得；圖片位元組經 `images.weserv.nl`。工具 MUST NOT 要求代理以 HTML 格式回傳頁面——實測該格式對未曾抓取過的網址一律只得到 Cloudflare 挑戰頁，而同一時間 markdown 格式第一次就取得內容。工具 MUST NOT 直接對 `amiami.jp`、`amiami.com` 或其圖片網域發出請求——該路徑已確認被 CORS 與 Cloudflare 雙重阻擋，且取得的圖片會汙染 canvas 而使 `toBlob` 失敗。
 
 匯入過程 SHALL 顯示逐步進度。整個流程 MUST NOT 阻斷頁面既有功能，且失敗時 MUST NOT 變更既有清單。
 
 #### Scenario: 成功匯入
 
-- **WHEN** 使用者輸入 `4570232591424` 並執行匯入
+- **WHEN** 使用者輸入 `6979272330921` 並執行匯入
 - **THEN** 工具搜尋出對應商品，取得其全部商品圖與內文，圖片追加至清單末端，內文顯示於內文面板
+
+#### Scenario: 未曾抓取過的 JAN 第一次即成功
+
+- **WHEN** 使用者輸入一個此前從未被任何人查詢過的 JAN
+- **THEN** 工具在不需等待背景通關的情況下取得搜尋結果，MUST NOT 顯示驗證逾時
 
 #### Scenario: 進度可見
 
 - **WHEN** 匯入進行中
-- **THEN** 工具顯示目前處於搜尋、擷取或下載哪一個階段，MUST NOT 只呈現無說明的等待狀態
+- **THEN** 工具顯示目前處於搜尋、擷取或下載哪一個階段，以及正在使用哪一個站，MUST NOT 只呈現無說明的等待狀態
 
 #### Scenario: 失敗不動既有清單
 
@@ -30,7 +37,9 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 工具 SHALL 自 amiami 搜尋頁的搜尋結果區塊取出商品代碼（`gcode`），MUST NOT 將頁面上的推薦商品誤判為搜尋結果。
 
-同一個 JAN 可能對應多筆商品（予約、再販、中古）。結果為多筆時，工具 SHALL 列出候選供使用者選擇，MUST NOT 自行選取其中一筆——選錯的後果要到上架後才會顯現，使用者當下無從察覺。
+同一個 JAN 可能對應多筆商品（予約、再販、中古、限定特典版）。結果為多筆時，工具 SHALL 列出候選供使用者選擇，MUST NOT 自行選取其中一筆——選錯的後果要到上架後才會顯現，使用者當下無從察覺。
+
+候選清單 SHALL 讓使用者**看得出差別**：每筆候選 MUST 顯示縮圖、**完整**的商品名（MUST NOT 以省略號截斷——差異常常就在被截掉的那一段）、商品代碼，以及來源提供時的價格與狀態。各筆名稱只有部分不同時，工具 SHALL 標示出每筆獨有的那一段。每筆候選 SHALL 明顯呈現為可點選的項目，並提供不選任何一筆的取消動作。候選清單在窄欄（手機寬度）MUST NOT 溢出或擠壓變形。
 
 #### Scenario: 唯一結果
 
@@ -41,6 +50,21 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 - **WHEN** 該 JAN 搜到 3 筆商品
 - **THEN** 工具列出 3 筆候選（各含縮圖與商品名）並等待使用者選擇，MUST NOT 自動取第一筆
+
+#### Scenario: 只差一段名稱的兩筆
+
+- **WHEN** 兩筆候選的名稱為 `【あみあみ限定特典】<商品名>` 與 `<商品名>`
+- **THEN** 兩筆皆顯示完整名稱，`【あみあみ限定特典】` 被標示為第一筆獨有的部分，兩筆各自顯示代碼與價格
+
+#### Scenario: 名稱完全相同的兩筆
+
+- **WHEN** 兩筆候選的名稱完全相同
+- **THEN** 工具不標示任何名稱片段，使用者可由代碼、價格與狀態分辨
+
+#### Scenario: 窄欄不變形
+
+- **WHEN** 頁面寬度為 400px 時列出候選
+- **THEN** 每筆候選撐滿欄寬、縮圖在名稱旁，名稱與卡片皆無溢出
 
 #### Scenario: 查無商品
 
@@ -62,7 +86,7 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 若所有項目皆為停售，工具 SHALL 保留全部，MUST NOT 排到零筆——那會變成假的「查無商品」，而該商品在 amiami 上明明找得到。
 
-保留下來的項目若為中古或帶有狀態標示，SHALL 在候選清單中標示出來。候選清單顯示的名稱 MUST NOT 混入折扣與價格。
+保留下來的項目帶有狀態標示時，SHALL 在候選清單中標示出來；來源內容有中古標示時（amiami.com 的標籤文字），亦 SHALL 標示為中古。amiami.jp 經代理取得的搜尋結果不含中古標示（實測），此時工具 MUST NOT 以 `-R` 尾碼或其他代號推測中古。候選清單顯示的名稱 MUST NOT 混入折扣與價格。
 
 #### Scenario: 現役與停售並存
 
@@ -89,9 +113,16 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 - **WHEN** 候選清單列出某項目
 - **THEN** 顯示的名稱為商品名本身，MUST NOT 混入折扣百分比或價格數字
 
+#### Scenario: 不以代號推測中古
+
+- **WHEN** amiami.jp 的搜尋結果中有一筆 `-R` 項目，且內容未標示中古
+- **THEN** 候選清單 MUST NOT 將其標示為中古
+
 ### Requirement: 圖片來源與順序
 
 工具 SHALL 匯入商品頁的主圖與全部圖庫圖片。主圖 MUST 排在第一位，圖庫圖片依其在頁面上的原始順序接續其後。重複的圖片網址 MUST 去除。
+
+圖庫圖片 MUST 取**大圖**。當代理回傳的內容只含圖庫縮圖網址時，工具 SHALL 將其換算為同一張圖的大圖網址，MUST NOT 以縮圖充數。
 
 每張圖片 SHALL 經代理取得**位元組**並包裝為 `File`，MUST NOT 以圖片網址直接餵給預覽或合成——後者會使 canvas 被汙染，導致輸出時 `toBlob` 拋出 `SecurityError`。
 
@@ -101,6 +132,11 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 - **WHEN** 某商品有 1 張主圖與 10 張圖庫圖片
 - **THEN** 清單中匯入 11 張，主圖為第一張，其餘依頁面原順序排列
+
+#### Scenario: 圖庫為大圖
+
+- **WHEN** 代理回傳的商品頁內容中，圖庫只以縮圖網址出現
+- **THEN** 匯入的圖庫圖片為對應的大圖，MUST NOT 為縮圖
 
 #### Scenario: 取得的是位元組
 
@@ -142,13 +178,13 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 ### Requirement: 內文擷取規則
 
-工具 SHALL 自商品頁的說明區塊只擷取「製品仕様」的標題與內文。「解説」與其餘段落 MUST NOT 被取用——上架用得到的是規格，解説是廠商的行銷文案，貼出去只會稀釋規格。排除 MUST 發生在資料層，而不是取來之後在畫面上藏起來。`.hashtag-container` 區塊 MUST 排除。
+工具 SHALL 自商品頁的說明區塊只擷取「製品仕様」的標題與內文。「解説」與其餘段落 MUST NOT 被取用——上架用得到的是規格，解説是廠商的行銷文案，貼出去只會稀釋規格。排除 MUST 發生在資料層，而不是取來之後在畫面上藏起來。站內 hashtag 標籤雲 MUST 排除。
 
-規格段落 SHALL 優先以商品頁給它的 id 定位，該 id 不存在時才退回以標題文字比對——標題文字是站方隨時可能改寫的顯示內容。
+規格段落的範圍 SHALL 自「製品仕様」標題起，至下一個段落標題或 hashtag 標籤雲為止。
 
-換行 MUST 依原始的 `<br>` 還原。僅取純文字會使規格黏成單一長串（如 `【サイズ】全高：約140mm【素材】プラスチック`），與頁面上的逐行呈現不符。
+換行 MUST 依頁面原本的逐行呈現還原。僅取純文字會使規格黏成單一長串（如 `【サイズ】全高：約140mm【素材】プラスチック`），與頁面上的逐行呈現不符。
 
-內文 SHALL **原樣保留日文**，MUST NOT 翻譯或改寫。
+來自 amiami.jp 的內文 SHALL **原樣保留日文**，MUST NOT 翻譯或改寫。來自備援站的內文亦 MUST NOT 翻譯，其呈現規則見「多站備援」需求。
 
 說明區塊不存在、或裡面找不到規格段落時，工具 SHALL 明確標示未取得內文，MUST NOT 悄悄產生空字串，也 MUST NOT 退而取其他段落充數。內文擷取的失敗與圖片匯入的失敗 MUST 互相獨立。
 
@@ -164,12 +200,12 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 #### Scenario: 排除 hashtag
 
-- **WHEN** 說明區塊中含有 `.hashtag-container`
-- **THEN** 該區塊的內容不出現在擷取結果中
+- **WHEN** 規格段落之後緊接站內 hashtag 標籤雲
+- **THEN** 標籤雲的內容不出現在擷取結果中
 
 #### Scenario: hashtag 區塊不存在
 
-- **WHEN** 取得的頁面快照中沒有 `.hashtag-container`
+- **WHEN** 取得的頁面內容中沒有 hashtag 標籤雲
 - **THEN** 擷取正常完成，MUST NOT 視為失敗
 
 #### Scenario: 內文擷取失敗但圖片成功
@@ -200,7 +236,9 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 ### Requirement: 商品名可填入輸出命名
 
-工具 SHALL 自商品頁取得商品名，並清除 `-amiami.jp-…` 站名後綴。工具 SHALL 提供將該名稱填入「輸出命名」欄位的動作。
+工具 SHALL 自商品頁取得商品名，並清除站名後綴（amiami.jp 的 `-amiami.jp-…`，以及 amiami.com 的站名標示）。工具 SHALL 提供將該名稱填入「輸出命名」欄位的動作。
+
+商品名 SHALL 優先取自 amiami.jp；只能取得備援站的商品名時，SHALL 使用備援站的名稱。清除後綴後若名稱為空（例如只取得站名而無商品名），工具 MUST NOT 提供空字串或站名作為填入內容。
 
 填入的名稱 MUST 經過既有的命名消毒規則處理。此動作 MUST 由使用者觸發，MUST NOT 自動覆蓋使用者已輸入的內容。
 
@@ -209,6 +247,11 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 - **WHEN** 商品頁標題為 `<商品名>-amiami.jp-あみあみオンライン本店-`
 - **THEN** 取得的商品名為 `<商品名>`，不含站名後綴
 
+#### Scenario: 只有站名
+
+- **WHEN** 備援站的頁面標題只有站名、沒有商品名
+- **THEN** 工具 MUST NOT 將站名當作商品名提供填入
+
 #### Scenario: 不自動覆蓋
 
 - **WHEN** 使用者已在輸出命名欄位輸入內容，接著執行匯入
@@ -216,22 +259,25 @@ TBD - created by archiving change add-jan-import. Update Purpose after archive.
 
 ### Requirement: Cloudflare 挑戰頁必須被辨識並重試
 
-工具 SHALL 辨識 Cloudflare 的挑戰頁，並在取得挑戰頁時等待後重抓，MUST NOT 將其視為正常頁面解析。
+工具 SHALL 辨識 Cloudflare 的挑戰頁，MUST NOT 將其視為正常頁面解析。
 
-amiami 掛有 Cloudflare。代理**第一次**抓取某個網址時會先取得「Just a moment…」挑戰頁並原樣回傳，之後才在背景通關並將真正的頁面寫入其快取；隔數秒重抓同一網址即可取得內容。
-
-挑戰頁上不存在搜尋結果容器，若不辨識，解析結果為零筆，使用者會看到與「查無商品」完全相同的訊息——一個看起來像資料問題、實際上是時序問題的假象。
+挑戰頁上不存在搜尋結果，若不辨識，解析結果為零筆，使用者會看到與「查無商品」完全相同的訊息——一個看起來像資料問題、實際上是存取問題的假象。
 
 辨識 MUST NOT 只依賴頁面標題，Cloudflare 的挑戰頁樣式不只一種。
 
-重試次數 SHALL 有上限；達到上限仍為挑戰頁時，SHALL 顯示明確的驗證未通過訊息，MUST NOT 回報為查無商品。
+取得挑戰頁時，工具 SHALL 短暫等待後重抓同一站，重抓次數與總等待時間 SHALL 有上限，且總等待 SHALL 明顯短於原先的 20 秒——實測代理已不會在背景通關，長時間等待同一站不再帶來回報。達到上限仍為挑戰頁時，工具 SHALL 將該站視為此步驟失敗並依「多站備援」切換下一站；所有站皆失敗時，SHALL 顯示明確的驗證未通過訊息，MUST NOT 回報為查無商品。
 
-等待期間 SHALL 顯示進度，使其可與當機區別。
+等待期間 SHALL 顯示進度與目前的站別，使其可與當機區別。
 
 #### Scenario: 第一次搜尋撞上挑戰頁
 
-- **WHEN** 使用者輸入一個此前未被抓取過的 JAN
-- **THEN** 工具在取得挑戰頁後等待並重抓，最終取得真正的搜尋結果，MUST NOT 顯示「查無商品」
+- **WHEN** 工具向某站搜尋時取得挑戰頁
+- **THEN** 工具短暫等待後重抓同一站一次，取得真正內容則繼續，MUST NOT 顯示「查無商品」
+
+#### Scenario: 重試上限用盡
+
+- **WHEN** 某站達到重抓上限後取得的仍是挑戰頁
+- **THEN** 工具將該站此步驟記為驗證未通過，MUST NOT 將其記為查無商品
 
 #### Scenario: 挑戰頁不得被當成零筆
 
@@ -240,24 +286,33 @@ amiami 掛有 Cloudflare。代理**第一次**抓取某個網址時會先取得�
 
 #### Scenario: 標題被更換的挑戰頁
 
-- **WHEN** 挑戰頁的標題不是「Just a moment…」但仍載入 Cloudflare 的挑戰腳本
+- **WHEN** 挑戰頁的標題不是「Just a moment…」但仍含有 Cloudflare 挑戰的特徵
 - **THEN** 工具仍然辨識其為挑戰頁
 
-#### Scenario: 重試上限用盡
+#### Scenario: 同站重抓上限用盡後切站
 
-- **WHEN** 達到重試上限後取得的仍是挑戰頁
-- **THEN** 工具顯示驗證未通過的明確訊息，MUST NOT 回報為查無商品
+- **WHEN** amiami.jp 在重抓上限內始終回傳挑戰頁
+- **THEN** 工具改試下一個備援站，MUST NOT 繼續等待 amiami.jp
+
+#### Scenario: 全部站都是挑戰頁
+
+- **WHEN** 所有站在各自的重抓上限內皆回傳挑戰頁
+- **THEN** 工具顯示驗證未通過的明確訊息並列出各站，MUST NOT 回報為查無商品
 
 #### Scenario: 等待期間有進度
 
 - **WHEN** 工具正在等待挑戰通過
-- **THEN** 顯示目前的等待進度，MUST NOT 呈現為無說明的停滯
+- **THEN** 顯示目前的等待進度與站別，MUST NOT 呈現為無說明的停滯
 
 ### Requirement: 外部相依的失敗處理
 
-匯入依賴兩個外部公共服務。任一環節失敗時，工具 SHALL 顯示明確的失敗原因與所處階段，MUST NOT 表現為「匯入成功但沒有內容」。
+匯入依賴兩個外部公共服務。任一環節失敗時，工具 SHALL 顯示明確的失敗原因、所處階段，以及**失敗發生在哪一個站（amiami.jp、amiami.com 英文站、amiami.com 中文站）**，MUST NOT 表現為「匯入成功但沒有內容」。
 
-**失敗 MUST NOT 自動重試**——對限流中的服務重試只會使情況惡化。此處的「失敗」指錯誤回應、逾時與限流；Cloudflare 挑戰頁**不屬於失敗**，它代表資料尚未就緒，其重試規則見上一條需求。兩者 MUST 分別處理。
+經備援仍全數失敗時，訊息 SHALL 逐站列出各自的失敗原因，MUST NOT 只呈現最後一站的錯誤——否則使用者無從判斷是單一站的問題還是代理本身的問題。
+
+**失敗 MUST NOT 對同一站自動重試**——對限流中的服務重試只會使情況惡化。此處的「失敗」指錯誤回應、逾時與限流；Cloudflare 挑戰頁**不屬於失敗**，其處置見上一條需求。兩者 MUST 分別處理。對**不同站**的切換不屬於重試。
+
+代理服務本身的錯誤（如 jina 回應限流或錯誤狀態碼）與 amiami 各站無關，換站也無法改善；此類錯誤 SHALL 直接停止並回報，MUST NOT 觸發切站。
 
 圖片下載 MUST NOT 有任何重試。
 
@@ -267,6 +322,21 @@ amiami 掛有 Cloudflare。代理**第一次**抓取某個網址時會先取得�
 
 - **WHEN** 代理服務回應錯誤或逾時
 - **THEN** 工具顯示明確的失敗訊息與所處階段，清單維持原狀
+
+#### Scenario: 失敗標示站別
+
+- **WHEN** amiami.jp 的商品頁擷取失敗
+- **THEN** 訊息明確指出是 amiami.jp 的擷取步驟失敗
+
+#### Scenario: 全數失敗逐站列出
+
+- **WHEN** amiami.jp、英文站、中文站的搜尋都失敗
+- **THEN** 訊息分別列出三個站各自的失敗原因
+
+#### Scenario: 代理服務限流不觸發切站
+
+- **WHEN** 代理服務本身回應限流
+- **THEN** 工具停止並回報代理服務限流，MUST NOT 改試其他站
 
 #### Scenario: 部分圖片失敗
 
@@ -301,3 +371,49 @@ amiami 掛有 Cloudflare。代理**第一次**抓取某個網址時會先取得�
 - **WHEN** 使用者匯入商品後對照片執行遮罩、套框與輸出
 - **THEN** 全程 MUST NOT 有任何包含使用者照片內容的請求送往外部服務
 
+### Requirement: 多站備援
+
+工具 SHALL 以 amiami.jp 為預設來源；amiami.jp 在某個步驟取不到資料時，SHALL 依序改試 amiami.com 英文站、amiami.com 中文站。
+
+「取不到資料」指：挑戰頁在重抓上限內未通過、該站回應錯誤、該站回傳無法解析出資料的頁面（包括 amiami.com 在其後端被擋時顯示的系統錯誤頁）。**合法的「查無商品」不屬於取不到資料**——amiami.jp 明確回報零筆時，SHALL 仍改試其他站，但全部站皆明確零筆時，工具 SHALL 顯示「查無商品」，而非失敗。
+
+備援 SHALL 以**步驟**為單位：搜尋與商品頁擷取各自從 amiami.jp 開始嘗試。商品代碼（`gcode`）三站共用，因此無論搜尋是在哪一站成功，商品頁擷取 SHALL 仍先試 amiami.jp，以取得日文原文的規格。
+
+同一次匯入的圖片、商品名與規格 SHALL 來自同一站的同一個商品頁，MUST NOT 混用兩站的內容——兩站的圖庫順序與張數不保證一致，混用會產生重複或缺漏而使用者無從察覺。
+
+來自備援站的規格 MUST NOT 以機器翻譯轉成日文——譯文不是原文，對上架用的規格而言，錯誤的日文比沒有日文更糟。此時內文面板 SHALL 明確標示該段規格的來源站與語言，使使用者知道它不是日文原文。
+
+#### Scenario: jp 正常時不使用備援
+
+- **WHEN** amiami.jp 的搜尋與商品頁都正常取得
+- **THEN** 工具不對 amiami.com 發出任何請求
+
+#### Scenario: jp 搜尋失敗改用英文站
+
+- **WHEN** amiami.jp 的搜尋取不到資料，英文站的搜尋成功
+- **THEN** 工具以英文站的搜尋結果繼續，並在進度中顯示已改用英文站
+
+#### Scenario: 搜尋在備援站成功後仍回 jp 取規格
+
+- **WHEN** 搜尋是由英文站取得 gcode
+- **THEN** 商品頁擷取先以該 gcode 嘗試 amiami.jp，成功時規格為日文原文
+
+#### Scenario: 英文站也失敗改用中文站
+
+- **WHEN** amiami.jp 與英文站在同一步驟都取不到資料
+- **THEN** 工具改試中文站
+
+#### Scenario: 備援站系統錯誤頁
+
+- **WHEN** amiami.com 回傳的是其系統錯誤頁
+- **THEN** 工具將其視為該站此步驟失敗並繼續備援，MUST NOT 解析為零筆或查無商品
+
+#### Scenario: 規格來自備援站
+
+- **WHEN** amiami.jp 的商品頁取不到，規格由英文站取得
+- **THEN** 內文面板顯示英文原文，並標示來源為 amiami.com 英文站，MUST NOT 顯示機器翻譯結果
+
+#### Scenario: 全部站明確查無
+
+- **WHEN** 三個站都明確回報該 JAN 零筆
+- **THEN** 工具顯示「查無商品」，MUST NOT 顯示為失敗
