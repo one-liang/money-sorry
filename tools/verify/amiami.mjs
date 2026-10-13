@@ -46,6 +46,8 @@ const fixture = n => fs.readFileSync(path.join(FIX, n), 'utf8');
 const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.goto('about:blank');
+// 與 studio.html 相同的載入順序：spec-ja.js（規格對照表）在前
+await page.addScriptTag({ content: fs.readFileSync(path.join(ROOT, 'lib/spec-ja.js'), 'utf8') });
 await page.addScriptTag({ content: fs.readFileSync(path.join(ROOT, 'lib/amiami.js'), 'utf8') });
 
 /** 在瀏覽器裡跑指定的純函式；拋錯時回傳 { error, stage, site, kind } 以便斷言 */
@@ -145,14 +147,32 @@ console.log('\nparseApiItem（amiami.com API）');
     'https://img.amiami.com/images/product/review/263/FIGURE-206235_02.jpg',
     'https://img.amiami.com/images/product/review/263/FIGURE-206235_03.jpg',
   ]);
-  eq('規格：只有 spec 一段、逐行、<br> 還原為換行、行尾空白去除、空行收斂', p.explain, [{
-    heading: 'Specifications',
-    body: 'Pre-painted Complete Figure\nScale: 1/7\nSize: Approx. H280mm (including base)\nMaterial: PVC, ABS\n\n[Set Contents]\nMain figure\nBase',
-  }]);
+  const EN = 'Pre-painted Complete Figure\nScale: 1/7\nSize: Approx. H280mm (including base)\nMaterial: PVC, ABS\n\n' +
+             '[Set Contents]\nMain figure\nBase\n[AmiAmi Exclusive Bonus]\n"Smile" face part';
+  eq('規格：只有 spec 一段；原文逐行、<br> 還原為換行、行尾空白去除、空行收斂',
+     p.explain.map(x => x.original), [{ heading: 'Specifications', body: EN }]);
+  eq('規格：依對照表轉為 amiami.jp 寫法，標題改為製品仕様，認不得的行保留英文',
+     p.explain.map(x => [x.heading, x.body, x.kept]), [['製品仕様',
+       '塗装済み完成品\n【スケール】1/7\n【サイズ】全高：約280mm(台座含む)\n【素材】PVC、ABS\n\n' +
+       '【セット内容一覧】\nフィギュア本体\n専用台座\n≪あみあみ限定特典≫\n"Smile" face part', 1]]);
+  eq('規格：逐行標出哪幾行保留英文', p.explain[0].lines.filter(l => !l.ok).map(l => l.text), ['"Smile" face part']);
   check('memo（製作人員）不進內文', !JSON.stringify(p.explain).includes('Sculptor'), JSON.stringify(p.explain));
 
   const cn = await run('parseApiItem', fixture('api-item-full.md'), 'cn');
-  eq('中文站：規格標題用中文站的字樣', cn.explain.map(x => x.heading), ['商品式样']);
+  eq('中文站：轉換後同為製品仕様，原文標題用中文站的字樣',
+     cn.explain.map(x => [x.heading, x.original.heading]), [['製品仕様', '商品式样']]);
+
+  const free = await run('parseApiItem',
+    fixture('api-item-full.md').replace(/"spec":"(?:[^"\\]|\\.)*"/, '"spec":"Only free text here\\nAnother free line"'), 'eng');
+  eq('一行都對不上時照舊回英文原文、不帶 original', free.explain,
+     [{ heading: 'Specifications', body: 'Only free text here\nAnother free line' }]);
+
+  const bare = await page.evaluate(([t]) => {
+    const keep = window.MS.specJa;
+    delete window.MS.specJa;
+    try { return window.MS.amiami.parseApiItem(t, 'eng').explain; } finally { window.MS.specJa = keep; }
+  }, [fixture('api-item-full.md')]);
+  eq('spec-ja.js 沒載入時退回英文原文，不讓匯入失敗', bare.map(x => [x.heading, !!x.original]), [['Specifications', false]]);
 
   const n = await run('parseApiItem', fixture('api-item-nospec.md'), 'eng');
   eq('沒有日文名時退回英文 sname', n.title, 'No Spec Test Figure(Pre-order)');
@@ -407,15 +427,15 @@ console.log('\n多站備援流程（假 fetch）');
      r.ok && [r.calls.filter(u => u === D('jp')).length, r.ok.attempts.map(a => [a.site, a.kind, a.message])],
      [1, [['jp', 'notFound', '此站沒有這個商品']]]);
   eq('商品頁：圖片、名稱、規格同取自英文站',
-     r.ok && [r.ok.imageUrls.length, r.ok.imageUrls[0].includes('img.amiami.com'), r.ok.title, r.ok.explain[0].heading],
-     [4, true, 'テスト手辦 1/7スケールフィギュア', 'Specifications']);
+     r.ok && [r.ok.imageUrls.length, r.ok.imageUrls[0].includes('img.amiami.com'), r.ok.title, r.ok.explain[0].heading, r.ok.explain[0].original.heading],
+     [4, true, 'テスト手辦 1/7スケールフィギュア', '製品仕様', 'Specifications']);
 
   r = await flow({
     [D('jp')]: page200('challenge.md'),
     [D('eng')]: page200('api-error-request.md'),
     [D('cn')]: page200('api-item-full.md'),
   }, ['detail', 'FIGURE-206235']);
-  check('商品頁：一路退到中文站', r.ok && r.ok.site === 'cn' && r.ok.explain[0].heading === '商品式样', JSON.stringify(r.err || ''));
+  check('商品頁：一路退到中文站', r.ok && r.ok.site === 'cn' && r.ok.explain[0].original.heading === '商品式样', JSON.stringify(r.err || ''));
 
   r = await flow({
     [D('jp')]: page200('detail-noexplain.md'),
@@ -451,6 +471,8 @@ console.log('\nstudio.html 接線');
 {
   const html = fs.readFileSync(path.join(ROOT, 'studio.html'), 'utf8');
   check('引用 lib/amiami.js', html.includes('src="./lib/amiami.js"'));
+  const ja = html.indexOf('src="./lib/spec-ja.js"');
+  check('引用 lib/spec-ja.js，且在 amiami.js 之前', ja > 0 && ja < html.indexOf('src="./lib/amiami.js"'));
   check('匯入走既有的 accept()', /await accept\(files\)/.test(html));
   const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   check('index.html 未引用 lib/', !index.includes('./lib/'));

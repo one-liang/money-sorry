@@ -22,6 +22,7 @@ node tools/verify/censor.mjs           # 遮罩頁
 node tools/verify/preview-adjust.mjs   # index.html 的手動構圖調整；基準取自 git tag v1.2.0
 node tools/verify/amiami.mjs           # JAN 匯入的解析純函式與備援流程，離線、只用 fixtures/
 node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weserv，不需 test/
+node tools/verify/spec-ja.mjs          # 備援站英文規格的日文對照表，node:vm、不需瀏覽器
 ```
 
 - 驗證腳本會自己起靜態 server（各自固定 port），不需要先跑 `serve.cmd`。
@@ -43,7 +44,7 @@ node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weser
 
 - **`index.html` 不得引用 `lib/` 或任何外部檔案。** 它有自己內嵌的一份 ZIP 實作，外框是 `FRAME_DATA_URI` 的 base64（`file://` 下讀磁碟上的 PNG 會 taint canvas，`toBlob` 拋 `SecurityError`）。
 - `studio.html` 直接讀 `assets/frame.png`。**換外框時兩處都要換**，且必須是同一張圖，否則 `studio.mjs` 的不變量會失敗。
-- `lib/*.js` 是 **classic script、不是 ES module**（引入 module 等於引入 build 步驟），以 IIFE 掛在全域 `window.MS` 命名空間下（`MS.amiami`、zip 相關函式）。
+- `lib/*.js` 是 **classic script、不是 ES module**（引入 module 等於引入 build 步驟），以 IIFE 掛在全域 `window.MS` 命名空間下（`MS.amiami`、`MS.specJa`、zip 相關函式）。
 - `models/320n.onnx` 與 `vendor/`（onnxruntime-web）刻意進版控；ORT 在 studio 中是**第一次打開遮罩開關時才動態載入**，只套框的流程全程不下載模型（有驗證釘著）。推論固定 `numThreads = 1`，不需要 COOP/COEP。
 
 ### 行為不變量（改動前要知道的）
@@ -71,8 +72,9 @@ node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weser
 
 - jina **一律用預設的 markdown 格式**，不可送 `x-return-format: html`——實測 html 格式對未抓過的網址只拿得到驗證頁，markdown 第一次就成功（依據見 `amiami-markdown-fetch` 的 design.md）。
 - 解析函式（`classify` / `parseSearch` / `parseProduct` / `parseSpec` …）是 **markdown 字串 → 資料的純函式**，靠顯示文字當錨點（`の検索結果(N 件)`、`製品仕様`…），才能用 `tools/verify/fixtures/` 的自撰樣本離線驗證。錨點缺席時**拋錯，不可回傳零筆**（會變成假的「查無商品」）。新增解析規則時要加對應的 fixture 與檢查。
-- 三站備援 jp → amiami.com/eng → /cn，站別集中定義在 `SITES`（`via: 'page' | 'api'`）。搜尋在任一站成功後，商品頁**永遠先回 jp**（gcode 三站共用，只有 jp 規格是日文原文）；圖片、名稱、規格取自同一來源；備援站規格不翻譯、UI 要標示來源；商品名日文優先（API 的 `sname_simple_j`）。
+- 三站備援 jp → amiami.com/eng → /cn，站別集中定義在 `SITES`（`via: 'page' | 'api'`）。搜尋在任一站成功後，商品頁**永遠先回 jp**（gcode 三站共用，只有 jp 規格是日文原文）；圖片、名稱、規格取自同一來源；備援站規格經對照表轉日文（見下一條）、UI 要標示來源；商品名日文優先（API 的 `sname_simple_j`）。
 - **amiami.com 不抓頁面，打 `api.amiami.com` 的 JSON**：以 `POST r.jina.ai`、body `{ url, customHeader: { 'X-User-Key': COM_KEY } }` 送出（jina 未公開的參數，免 key）。經 jina 渲染 SPA 只會拿到「System Error Occured」，不要退回那條路（依據見 `amiami-com-api` 的 design.md）。API 回 `Invalid access`（10210）＝金鑰被換，去 amiami.com 前端 JS 找新的 `X-User-Key`。
+- **備援站的英文規格經 `lib/spec-ja.js` 查表轉成 amiami.jp 寫法，不是機器翻譯**：逐行比對句型，**對不上就整行保留英文**（不拼湊半句），畫面以底色標出、英文原文可展開、「複製全部」只有日文。對照表只收實際與 amiami.jp 同商品對照過的寫法，用字不一取多數（依據與實測見 `spec-ja-phrasebook` 的 design.md）。新增條目要在 `tools/verify/spec-ja.mjs` 加一列。不可改接外部翻譯服務（隱私界線、金鑰藏不住、錯的日文比英文糟）。amiami.jp 來源一律原樣，不經對照表。
 - jina 快取一小時、連挑戰頁也快取：挑戰頁的同站重抓**必須帶 `x-no-cache`**。
 - Cloudflare 驗證頁要辨識；同站短重抓一次後換站。**代理本身**限流／5xx／連不上時直接停止、不換站；限流與錯誤不重試，圖片下載完全不重試。
 - 失敗一律拋出帶 `stage` 與 `site`（`jp`/`eng`/`cn`/`proxy`/`all`）的錯誤讓 UI 明確呈現，全站失敗帶逐站 `attempts`，不可靜默回傳空結果。

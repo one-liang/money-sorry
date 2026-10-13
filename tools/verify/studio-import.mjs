@@ -121,6 +121,11 @@ async function importWith(routes, { jan = JAN, until = 'done', onPicks = null } 
     status: 200, contentType: 'image/jpeg', headers: { 'access-control-allow-origin': '*' }, body: JPEG,
   }));
 
+  // 「複製全部」寫進剪貼簿的文字：headless 沒有剪貼簿權限，攔下來比對
+  await page.addInitScript(() => {
+    window.__copied = null;
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async t => { window.__copied = t; } } });
+  });
   await page.goto(`http://localhost:${PORT}/studio.html`);
   // 狀態列是一行會被覆寫的文字；中途的「改試…」只能靠觀察者收集
   await page.evaluate(() => {
@@ -141,7 +146,14 @@ async function importWith(routes, { jan = JAN, until = 'done', onPicks = null } 
     await page.waitForFunction(() => document.querySelectorAll('#list li').length > 0, null, { timeout: 30000 });
   }
 
+  if (await page.locator('#exp-copy').isVisible() && await page.locator('#exp-copy').isEnabled()) {
+    await page.click('#exp-copy');
+    await page.waitForFunction(() => window.__copied !== null, null, { timeout: 5000 });
+  }
   const state = await page.evaluate(() => ({
+    copied: window.__copied,
+    en: [...document.querySelectorAll('#exp-body .exp-b .exp-en')].map(e => e.textContent),
+    orig: [...document.querySelectorAll('#exp-body .exp-orig')].map(d => ({ open: d.open, text: d.querySelector('.exp-b').textContent })),
     msgs: window.__msgs,
     msg: document.getElementById('imp-msg').textContent,
     cls: document.getElementById('imp-msg').className,
@@ -167,6 +179,8 @@ console.log('\njp 正常');
   check('進度顯示 amiami.jp', r.msgs.some(m => m.includes('（amiami.jp）')), r.msgs.join(' | '));
   check('內文面板顯示製品仕様', !r.expHidden && r.exp.includes('製品仕様') && r.exp.includes('【素材】PVC、ABS'), r.exp);
   check('jp 來源不加備援標示', r.src.length === 0, r.src.join());
+  check('jp 來源不經對照表：沒有英文原文、沒有標色', r.orig.length === 0 && r.en.length === 0, JSON.stringify([r.orig, r.en]));
+  check('jp 來源「複製全部」原樣', !!r.copied && r.copied.startsWith('製品仕様\n塗装済み完成品'), JSON.stringify(r.copied));
   check('沒有任何 amiami.com 請求', !r.jinaCalls.some(u => u.includes('amiami.com')), r.jinaCalls.join(' '));
   check('沒有直接打 amiami 的請求', r.direct.length === 0, r.direct.join(' '));
   check('商品名可填入', !r.nameHidden && r.name.includes('測試商品'), r.name);
@@ -186,8 +200,19 @@ console.log('\n只在 amiami.com 上架（jp 查無 → 英文站 API）');
   check('搜尋時顯示「改試英文站」', r.msgs.some(m => m.includes('搜尋中：改試 amiami.com（英文站）')), r.msgs.join(' | '));
   check('商品頁仍先試 jp', r.jinaCalls.includes(D('FIGURE-206235', 'jp')), r.jinaCalls.join(' '));
   check('完成訊息註明來源站', r.cls === 'done' && r.msg.includes('來源：amiami.com（英文站）'), r.msg);
-  check('內文面板標示來源與非日文原文', r.src.length === 1 && r.src[0].includes('英文站') && r.src[0].includes('非日文原文'), r.src.join());
-  check('內文是 Specifications、不含製作人員', r.exp.includes('Specifications') && r.exp.includes('Scale: 1/7') && !r.exp.includes('Sculptor'), r.exp);
+  check('內文面板標示來源、已轉為日文、保留英文的行數',
+        r.src.length === 1 && r.src[0].includes('英文站') && r.src[0].includes('已依對照表轉為日文') && r.src[0].includes('1 行對不上'), r.src.join());
+  check('內文已轉為日文：製品仕様、amiami.jp 寫法、不含製作人員',
+        r.exp.includes('製品仕様') && r.exp.includes('【スケール】1/7') && r.exp.includes('【サイズ】全高：約280mm(台座含む)') &&
+        r.exp.includes('≪あみあみ限定特典≫') && !r.exp.includes('Sculptor'), r.exp);
+  check('對不上的行保留英文並以底色標出', JSON.stringify(r.en) === JSON.stringify(['"Smile" face part']), JSON.stringify(r.en));
+  check('英文原文可展開對照、預設收合',
+        r.orig.length === 1 && !r.orig[0].open && r.orig[0].text.startsWith('Specifications\nPre-painted Complete Figure\nScale: 1/7'),
+        JSON.stringify(r.orig));
+  check('「複製全部」是日文、不含來源標示與英文原文',
+        !!r.copied && r.copied.startsWith('製品仕様\n塗装済み完成品\n【スケール】1/7') && r.copied.endsWith('≪あみあみ限定特典≫\n"Smile" face part') &&
+        !r.copied.includes('Specifications') && !r.copied.includes('來源') && !r.copied.includes('英文原文'),
+        JSON.stringify(r.copied));
   check('商品名用日文名', !r.nameHidden && r.name === 'テスト手辦 1/7スケールフィギュア', r.name);
   check('amiami.com 的請求都是 POST 且帶金鑰',
         r.posts.length === 2 && r.posts.every(p => p.target.startsWith(API) && p.key === 'amiami_dev'), JSON.stringify(r.posts));
