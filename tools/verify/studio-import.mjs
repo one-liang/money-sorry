@@ -48,16 +48,24 @@ const server = http.createServer((req, res) => {
 
 const fixture = n => fs.readFileSync(path.join(FIX, n), 'utf8');
 const JAN = '4570000000001';
+const API = 'https://api.amiami.com/api/v1.0/';
 const S = {
   jp:  `https://www.amiami.jp/top/search/list?s_keywords=${JAN}`,
-  eng: `https://www.amiami.com/eng/search/list/?s_keywords=${JAN}`,
-  cn:  `https://www.amiami.com/cn/search/list/?s_keywords=${JAN}`,
+  eng: `${API}items?pagemax=20&lang=eng&s_keywords=${JAN}`,
+  cn:  `${API}items?pagemax=20&lang=cn&s_keywords=${JAN}`,
 };
 const D = (gcode, site) => ({
   jp:  `https://www.amiami.jp/top/detail/detail?gcode=${gcode}`,
-  eng: `https://www.amiami.com/eng/detail/?gcode=${gcode}`,
-  cn:  `https://www.amiami.com/cn/detail/?gcode=${gcode}`,
+  eng: `${API}item?gcode=${gcode}&lang=eng`,
+  cn:  `${API}item?gcode=${gcode}&lang=cn`,
 })[site];
+
+// 送 JSON body 或 x-no-cache 標頭都會觸發 CORS 預檢；真的 jina 會放行，這裡照樣回
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': '*',
+  'access-control-allow-methods': 'GET, POST',
+};
 
 const browser = await chromium.launch();
 
@@ -84,22 +92,28 @@ async function importWith(routes, { jan = JAN, until = 'done', onPicks = null } 
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const page = await ctx.newPage();
   const jinaCalls = [];
+  const posts = [];
   const direct = [];
   const counts = {};
 
   page.on('request', r => {
-    if (/^https?:\/\/(www\.|img\.)?amiami\.(jp|com)\//.test(r.url())) direct.push(r.url());
+    if (/^https?:\/\/(www\.|img\.|api\.)?amiami\.(jp|com)\//.test(r.url())) direct.push(r.url());
   });
+  // jp：GET r.jina.ai/<網址>；com：POST r.jina.ai，目標網址在 body 的 url
   await page.route('https://r.jina.ai/**', route => {
-    const target = route.request().url().replace('https://r.jina.ai/', '');
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+    const post = req.method() === 'POST';
+    const target = post ? req.postDataJSON().url : req.url().replace('https://r.jina.ai/', '');
     jinaCalls.push(target);
+    if (post) posts.push({ target, key: ((req.postDataJSON().customHeader) || {})['X-User-Key'] || '' });
     const list = routes[target];
-    if (!list) return route.fulfill({ status: 422, contentType: 'application/json', body: fixture('jina-error.json') });
+    if (!list) return route.fulfill({ status: 422, contentType: 'application/json', headers: CORS, body: fixture('jina-error.json') });
     const i = Math.min(counts[target] = (counts[target] || 0) + 1, list.length) - 1;
     return route.fulfill({
       status: list[i].status || 200,
       contentType: 'text/plain; charset=utf-8',
-      headers: { 'access-control-allow-origin': '*' },
+      headers: CORS,
       body: list[i].body,
     });
   });
@@ -139,7 +153,7 @@ async function importWith(routes, { jan = JAN, until = 'done', onPicks = null } 
     name: document.querySelector('#imp-name .t') ? document.querySelector('#imp-name .t').textContent : '',
   }));
   await ctx.close();
-  return { ...state, jinaCalls, direct };
+  return { ...state, jinaCalls, posts, direct };
 }
 
 const ok200 = f => [{ body: fixture(f) }];
@@ -158,20 +172,41 @@ console.log('\njp 正常');
   check('商品名可填入', !r.nameHidden && r.name.includes('測試商品'), r.name);
 }
 
+console.log('\n只在 amiami.com 上架（jp 查無 → 英文站 API）');
+{
+  // 回報的案例：JAN 4571623518150 在 jp 搜尋查無、jp 商品頁是錯誤頁，英文站／中文站都有
+  const r = await importWith({
+    [S.jp]: ok200('search-none.md'),
+    [S.eng]: ok200('api-search-one.md'),
+    [D('FIGURE-206235', 'jp')]: ok200('jp-detail-error.md'),
+    [D('FIGURE-206235', 'eng')]: ok200('api-item-full.md'),
+  }, { until: 'list' });
+  check('匯入成功：主圖＋3 張圖庫', r.rows === 4, `rows=${r.rows} ${r.msg}`);
+  check('不再顯示為查無', !r.msg.includes('查無'), r.msg);
+  check('搜尋時顯示「改試英文站」', r.msgs.some(m => m.includes('搜尋中：改試 amiami.com（英文站）')), r.msgs.join(' | '));
+  check('商品頁仍先試 jp', r.jinaCalls.includes(D('FIGURE-206235', 'jp')), r.jinaCalls.join(' '));
+  check('完成訊息註明來源站', r.cls === 'done' && r.msg.includes('來源：amiami.com（英文站）'), r.msg);
+  check('內文面板標示來源與非日文原文', r.src.length === 1 && r.src[0].includes('英文站') && r.src[0].includes('非日文原文'), r.src.join());
+  check('內文是 Specifications、不含製作人員', r.exp.includes('Specifications') && r.exp.includes('Scale: 1/7') && !r.exp.includes('Sculptor'), r.exp);
+  check('商品名用日文名', !r.nameHidden && r.name === 'テスト手辦 1/7スケールフィギュア', r.name);
+  check('amiami.com 的請求都是 POST 且帶金鑰',
+        r.posts.length === 2 && r.posts.every(p => p.target.startsWith(API) && p.key === 'amiami_dev'), JSON.stringify(r.posts));
+  check('沒有直接打 amiami 的請求', r.direct.length === 0, r.direct.join(' '));
+}
+
 console.log('\njp 挑戰頁 → 英文站');
 {
   const r = await importWith({
     [S.jp]: ok200('challenge.md'),
-    [S.eng]: ok200('com-cn-search.md'),
-    [D('FIG-MOE-5596-R', 'jp')]: ok200('challenge.md'),
-    [D('FIG-MOE-5596-R', 'eng')]: ok200('com-eng-detail.md'),
+    [S.eng]: ok200('api-search-one.md'),
+    [D('FIGURE-206235', 'jp')]: ok200('challenge.md'),
+    [D('FIGURE-206235', 'eng')]: ok200('api-item-full.md'),
   }, { until: 'list' });
-  check('匯入成功', r.rows === 3, `rows=${r.rows}`);
+  check('匯入成功', r.rows === 4, `rows=${r.rows}`);
   check('等待期間顯示站別與重試', r.msgs.some(m => m.includes('amiami.jp 驗證中')), r.msgs.join(' | '));
   check('換站時顯示「改試英文站」', r.msgs.some(m => m.includes('改試 amiami.com（英文站）')), r.msgs.join(' | '));
-  check('商品頁仍先試 jp', r.jinaCalls.includes(D('FIG-MOE-5596-R', 'jp')), r.jinaCalls.join(' '));
+  check('商品頁仍先試 jp', r.jinaCalls.includes(D('FIGURE-206235', 'jp')), r.jinaCalls.join(' '));
   check('完成訊息註明來源站', r.msg.includes('來源：amiami.com（英文站）'), r.msg);
-  check('內文面板標示來源與非日文原文', r.src.length === 1 && r.src[0].includes('英文站') && r.src[0].includes('非日文原文'), r.src.join());
   check('沒有直接打 amiami 的請求', r.direct.length === 0, r.direct.join(' '));
 }
 
@@ -179,12 +214,12 @@ console.log('\n三站皆失敗');
 {
   const r = await importWith({
     [S.jp]: ok200('challenge.md'),
-    [S.eng]: ok200('com-syserror.md'),
-    [S.cn]: ok200('com-shell.md'),
+    [S.eng]: ok200('api-error-access.md'),
+    [S.cn]: ok200('search-one.md'),       // 不是 JSON
   });
   check('標示為錯誤', r.cls === 'err', r.cls);
   check('三個站名都出現', ['amiami.jp', '英文站', '中文站'].every(s => r.msg.includes(s)), r.msg);
-  check('各站原因不同且都列出', r.msg.includes('Cloudflare') && r.msg.includes('系統錯誤') && r.msg.includes('外殼'), r.msg);
+  check('各站原因不同且都列出', r.msg.includes('Cloudflare') && r.msg.includes('金鑰') && r.msg.includes('格式認不出來'), r.msg);
   check('MUST NOT 顯示為查無', !r.msg.includes('查無'), r.msg);
   check('清單維持原狀', r.rows === 0, `rows=${r.rows}`);
 }
@@ -193,11 +228,21 @@ console.log('\njp 查無、com 取不到');
 {
   const r = await importWith({
     [S.jp]: ok200('search-none.md'),
-    [S.eng]: ok200('com-syserror.md'),
-    [S.cn]: ok200('com-syserror.md'),
+    [S.eng]: ok200('api-error-access.md'),
+    [S.cn]: ok200('api-error-access.md'),
   });
   check('顯示查無', r.msg.startsWith(`查無 ${JAN} 的商品`), r.msg);
   check('同時說明哪些站未能確認', r.msg.includes('英文站') && r.msg.includes('中文站') && r.msg.includes('未能確認'), r.msg);
+}
+
+console.log('\n三站都明確查無');
+{
+  const r = await importWith({
+    [S.jp]: ok200('search-none.md'),
+    [S.eng]: ok200('api-search-none.md'),
+    [S.cn]: ok200('api-search-none.md'),
+  });
+  check('只說查無，不附「未能確認」', r.msg === `查無 ${JAN} 的商品` && r.cls === 'err', r.msg);
 }
 
 console.log('\n代理服務限流');
@@ -293,7 +338,7 @@ console.log('\n多筆候選：手機寬度');
 
 console.log('\n商品名只有站名');
 {
-  const noTitle = 'Title: AmiAmi [Character & Hobby Shop]\n\nURL Source: https://www.amiami.jp/top/detail/detail?gcode=FIGURE-206235\n\n' +
+  const noTitle = 'Title: -amiami.jp-あみあみオンライン本店-\n\nURL Source: https://www.amiami.jp/top/detail/detail?gcode=FIGURE-206235\n\n' +
                   'Markdown Content:\n![x](https://img.amiami.jp/images/product/main/263/FIGURE-206235.jpg)\n';
   const r = await importWith({ [S.jp]: ok200('search-one.md'), [D('FIGURE-206235', 'jp')]: [{ body: noTitle }] },
                              { until: 'list' });

@@ -71,7 +71,9 @@ node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weser
 
 - jina **一律用預設的 markdown 格式**，不可送 `x-return-format: html`——實測 html 格式對未抓過的網址只拿得到驗證頁，markdown 第一次就成功（依據見 `amiami-markdown-fetch` 的 design.md）。
 - 解析函式（`classify` / `parseSearch` / `parseProduct` / `parseSpec` …）是 **markdown 字串 → 資料的純函式**，靠顯示文字當錨點（`の検索結果(N 件)`、`製品仕様`…），才能用 `tools/verify/fixtures/` 的自撰樣本離線驗證。錨點缺席時**拋錯，不可回傳零筆**（會變成假的「查無商品」）。新增解析規則時要加對應的 fixture 與檢查。
-- 三站備援 jp → amiami.com/eng → /cn，站別集中定義在 `SITES`。搜尋在任一站成功後，商品頁**永遠先回 jp**（gcode 三站共用，只有 jp 規格是日文原文）；圖片、名稱、規格取自同一頁；備援站規格不翻譯、UI 要標示來源。com 的 fixture 是推定樣本（撰寫當下 com 後端被擋）。
+- 三站備援 jp → amiami.com/eng → /cn，站別集中定義在 `SITES`（`via: 'page' | 'api'`）。搜尋在任一站成功後，商品頁**永遠先回 jp**（gcode 三站共用，只有 jp 規格是日文原文）；圖片、名稱、規格取自同一來源；備援站規格不翻譯、UI 要標示來源；商品名日文優先（API 的 `sname_simple_j`）。
+- **amiami.com 不抓頁面，打 `api.amiami.com` 的 JSON**：以 `POST r.jina.ai`、body `{ url, customHeader: { 'X-User-Key': COM_KEY } }` 送出（jina 未公開的參數，免 key）。經 jina 渲染 SPA 只會拿到「System Error Occured」，不要退回那條路（依據見 `amiami-com-api` 的 design.md）。API 回 `Invalid access`（10210）＝金鑰被換，去 amiami.com 前端 JS 找新的 `X-User-Key`。
+- jina 快取一小時、連挑戰頁也快取：挑戰頁的同站重抓**必須帶 `x-no-cache`**。
 - Cloudflare 驗證頁要辨識；同站短重抓一次後換站。**代理本身**限流／5xx／連不上時直接停止、不換站；限流與錯誤不重試，圖片下載完全不重試。
 - 失敗一律拋出帶 `stage` 與 `site`（`jp`/`eng`/`cn`/`proxy`/`all`）的錯誤讓 UI 明確呈現，全站失敗帶逐站 `attempts`，不可靜默回傳空結果。
 - 同商品多筆上架時依**狀態**（販売停止中／中古）篩選，不可依 `gcode` 的 `-R` 尾碼判斷。
