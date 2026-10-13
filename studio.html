@@ -968,6 +968,13 @@
   .exp-none { font: var(--fs-body)/1.6 inherit; color: var(--bad); }
   /* 規格來自備援站時的警示；與 .exp-none 同一個「要注意」的顏色，不發明新顏色 */
   .exp-src { margin-bottom: 6px; font: 600 var(--fs-meta)/1.5 inherit; color: var(--bad); }
+  /* 對照表對不上、保留英文的行。底色沿用 .badge.warn，不發明新顏色；只在畫面上，複製出去是純文字 */
+  .exp-en { background: #fdf0da; color: var(--warn); border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  /* 英文原文供對照，預設收合，不進「複製全部」 */
+  .exp-orig { margin-top: 8px; }
+  .exp-orig summary { font: 600 var(--fs-meta)/1.5 inherit; color: var(--muted); cursor: pointer; }
+  .exp-orig summary:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
+  .exp-orig .exp-b { color: var(--muted); }
 
   .notes { margin: 22px 0 0; border-left: 3px solid var(--amber); background: #fffaf0; border-radius: 0 10px 10px 0; }
   .notes > summary {
@@ -1213,9 +1220,9 @@
       <li>本工具遮的是<b>解剖部位</b>，不判斷「這張圖違不違規」，也不保證通過任何平台的審核。</li>
       <li>胸部偵測相當穩定，<b>私處是最弱的一環</b>（實測召回約一半），請務必逐張確認。</li>
       <li>左邊可以貼 <b>JANコード</b> 從 amiami 匯入商品圖與說明。匯入會經過 <code>r.jina.ai</code> 與 <code>images.weserv.nl</code> 兩個外部服務——<b>送出的只有這個 JAN 與 amiami 的公開網址，你自己的照片不會被送出</b>。amiami 的圖片不發 CORS 標頭也擋一般請求，不經代理就拿不到位元組，畫到畫布上還會讓輸出直接失敗。</li>
-      <li><b>預設查 amiami.jp，取不到或查無時依序改試 amiami.com 英文站、中文站</b>（商品代碼三站共用；只在 amiami.com 上架的商品也找得到）。就算是在備援站搜到的，擷取商品頁時仍會先回 amiami.jp 拿日文原文規格。規格只能從備援站取得時照原文顯示並標明來源，<b>不做機器翻譯</b>——譯文不是原文，貼上架反而有害。</li>
+      <li><b>預設查 amiami.jp，取不到或查無時依序改試 amiami.com 英文站、中文站</b>（商品代碼三站共用；只在 amiami.com 上架的商品也找得到）。就算是在備援站搜到的，擷取商品頁時仍會先回 amiami.jp 拿日文原文規格。規格只能從備援站取得時（英文），以<b>內建用語對照表</b>逐行轉成 amiami.jp 的寫法並標明來源；<b>對不上的行保留英文、以底色標出</b>，不做機器翻譯——錯的日文貼上架比英文更糟。英文原文可展開對照。</li>
       <li><b>失敗訊息會寫明是哪一站、哪一步</b>。遇到 amiami 的 Cloudflare 驗證頁會短暫重抓一次，仍不行就換站；三站都不行時會逐站列出原因。代理服務本身限流時直接停止、不換站——換站也是打同一個代理。</li>
-      <li>匯入到的<b>商品說明</b>會顯示在右欄，只取商品頁的<b>製品仕様</b>那一段（解説不取），可以「複製全部」。文字是<b>原樣日文</b>，不翻譯；它只出現在畫面上，<b>不會被打包進 ZIP</b>。</li>
+      <li>匯入到的<b>商品說明</b>會顯示在右欄，只取商品頁的<b>製品仕様</b>那一段（解説不取），可以「複製全部」。來自 amiami.jp 的文字是<b>原樣日文</b>，不改動；它只出現在畫面上，<b>不會被打包進 ZIP</b>。</li>
       <li>照片全程在瀏覽器內處理，<b>你的照片不會上傳到任何地方</b>；只有 JAN 匯入會對外發出請求，而且送出的不含任何照片。完全不用匯入的話，全程不會有任何對外連線。</li>
       <li>iPhone 的 HEIC 檔請用 <b>Safari</b> 開啟本頁，Chrome 無法解碼。</li>
     </ul>
@@ -1224,6 +1231,7 @@
 </div>
 
 <script src="./lib/zip.js"></script>
+<script src="./lib/spec-ja.js"></script>
 <script src="./lib/amiami.js"></script>
 <script>
 (() => {
@@ -3452,12 +3460,17 @@
         n.textContent = '未取得內文（圖片不受影響）';
         box.append(n);
       } else {
-        // 備援站的規格不是日文原文，也不做機器翻譯（譯文會被當成原文貼上架）。
+        // 備援站的規格不是日文原文。對得上對照表的行已轉成 amiami.jp 的寫法（lib/spec-ja.js），
+        // 對不上的行保留英文——不做機器翻譯，譯文會被當成原文貼上架。
         // 所以要在畫面上講清楚——但這行只給人看，不進「複製全部」
         if (p.site && p.site !== 'jp') {
           const src = document.createElement('div');
           src.className = 'exp-src';
-          src.textContent = `來源：${siteLabel(p.site)}・非日文原文`;
+          const conv = p.explain.find(s => s.original);
+          src.textContent = !conv
+            ? `來源：${siteLabel(p.site)}・非日文原文`
+            : `來源：${siteLabel(p.site)}・已依對照表轉為日文` +
+              (conv.kept ? `，${conv.kept} 行對不上、保留英文（底色標出），貼上前請確認` : '');
           box.append(src);
         }
         // 一個商品現在只會有「製品仕様」一段，但仍照陣列走——挑哪幾段是
@@ -3471,8 +3484,31 @@
           }
           const b = document.createElement('p');
           b.className = 'exp-b';
-          b.textContent = s.body;
+          if (s.lines) {
+            // 逐行組回去，保留英文的行包一層標出來；文字內容與 s.body 完全相同
+            s.lines.forEach((l, i) => {
+              if (i) b.append('\n');
+              if (l.ok) { b.append(l.text); return; }
+              const en = document.createElement('span');
+              en.className = 'exp-en';
+              en.textContent = l.text;
+              b.append(en);
+            });
+          } else {
+            b.textContent = s.body;
+          }
           box.append(b);
+          if (s.original) {
+            const d = document.createElement('details');
+            d.className = 'exp-orig';
+            const sum = document.createElement('summary');
+            sum.textContent = '英文原文';
+            const o = document.createElement('p');
+            o.className = 'exp-b';
+            o.textContent = (s.original.heading ? s.original.heading + '\n' : '') + s.original.body;
+            d.append(sum, o);
+            box.append(d);
+          }
         }
       }
       expBody.append(box);
