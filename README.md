@@ -7,6 +7,12 @@
 **你的照片全程留在這台電腦，三個工具都不會上傳任何檔案。**
 （JAN 匯入是往回抓，送出去的只有 JAN 代碼與公開網址——見「[從 JAN 匯入](#從-jan-匯入amiami)」。）
 
+**線上直接用（GitHub Pages）：**
+
+- [遮罩＋套框（studio.html）](https://one-liang.github.io/money-sorry/studio.html)
+- [只套框（index.html）](https://one-liang.github.io/money-sorry/)
+- [只遮罩（censor.html）](https://one-liang.github.io/money-sorry/censor.html)
+
 ## 三個工具，該用哪一個
 
 | | 做什麼 | 開啟方式 |
