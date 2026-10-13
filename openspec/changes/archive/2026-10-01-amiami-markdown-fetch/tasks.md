@@ -43,7 +43,7 @@
 ## 7. 整合驗證
 
 - [x] 7.1 本機 `serve` 後以真實網路匯入 `6979272330921`、`4580416948159`（全停售）與一個查無的 JAN，確認 jp 路徑成功、停售標示正確、查無訊息正確。驗證：人工操作結果記入 design.md 附錄
-- [ ] 7.2 部署到 GitHub Pages 的 develop 預覽或 release 前，在 Pages 網址上重複 7.1 的第一個 JAN。驗證：在 Pages 上匯入成功
+- [x] 7.2 部署到 GitHub Pages 的 develop 預覽或 release 前，在 Pages 網址上重複 7.1 的第一個 JAN。驗證：在 Pages 上匯入成功
 
 ## 8. 候選清單版面（實作期間回報）
 
@@ -58,3 +58,4 @@
 - 6.2：`CLAUDE.md` 仍出現 `x-return-format` 字樣，是「不可送出」的規則敘述，非用法。
 - 1.5：英文站未能以 Chrome 實看——amiami.com 依使用者的語言 cookie 自動導向 `/cn/`，切換語言會動到使用者設定，故未做；英文站的標籤文字為推定值，已在 fixture 檔頭註明。
 - 7.2 封存時尚未完成：`release/1.6.0` 合併進 `main` 並推送（`9af4830`）後，GitHub 沒有觸發 `pages-build-deployment`（Actions 只有到 #6／`f0c90f2`，Pages 設定正常、githubstatus 無事故）。改為封存後隨 `v1.6.0` 的推送觸發部署，再於 Pages 上驗證；結果記在 release 說明與後續 commit。
+  - 2026-10-01 補驗：`v1.6.0` 推送（`a93033c`）後約 30 秒 Pages 即更新。以 Playwright 開 https://one-liang.github.io/money-sorry/studio.html 匯入 `6979272330921`：2 筆候選撐滿欄寬、【あみあみ限定特典】有標示、代碼與價格可見；選第一筆後匯入 20 張、製品仕様為日文逐行，全程 0 個直接對 amiami 的請求，13.7 秒。
