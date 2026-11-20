@@ -695,6 +695,9 @@
   .chip:focus-visible { outline: 2px solid var(--brown2); outline-offset: 1px; }
   .chip.on { color: var(--brown); background: var(--amber2); border-color: var(--amber); }
   .chip.censor.on { color: #fff; background: #4a4a4a; border-color: #2e2e2e; }
+  .chip.fit.on { color: #fff; background: var(--brown2); border-color: var(--brown); }
+  /* 套框關著時完整顯示沒有作用：仍可切換，只是退到背景 */
+  .chip.fit.idle { opacity: .45; }
 
   /* ---- preview ---- */
   #modes {
@@ -1128,6 +1131,17 @@
               <span class="count" id="censor-count">—</span>
             </span>
           </div>
+
+          <!-- 完整顯示只在套框開著時有作用：整張照片縮進框內，
+               直圖左右、橫圖上下留白，不裁切 -->
+          <div class="brow">
+            <button type="button" class="tg" id="bulk-fit" role="checkbox"
+                    aria-checked="false" aria-labelledby="lbl-fit" disabled><i></i></button>
+            <span class="btxt">
+              <span class="lbl" id="lbl-fit">完整顯示</span>
+              <span class="count" id="fit-count">—</span>
+            </span>
+          </div>
         </div>
 
         <!-- 每個 li 都是 role="option"，容器沒有 listbox 的話那是孤兒角色 -->
@@ -1267,11 +1281,13 @@
     pickOn:   document.getElementById('bulk-pick'),
     frameOn:  document.getElementById('bulk-frame'),
     censorOn: document.getElementById('bulk-censor'),
+    fitOn:    document.getElementById('bulk-fit'),
   };
   const bulkCount = {
     pickOn:   document.getElementById('pick-count'),
     frameOn:  document.getElementById('frame-count'),
     censorOn: document.getElementById('censor-count'),
+    fitOn:    document.getElementById('fit-count'),
   };
   const namingEl  = document.getElementById('naming');
   const cardOutput= document.getElementById('card-output');
@@ -1322,6 +1338,7 @@
    * @property {string} thumbUrl
    * @property {boolean} pickOn                        要不要下載；預設要
    * @property {boolean} frameOn                       套框開關；預設開
+   * @property {boolean} fitOn                         完整顯示（contain 留白）；預設關＝原本的 cover 裁切
    * @property {boolean} censorOn                      遮罩開關；預設關（模型延遲載入）
    * @property {'pending'|'ready'|'error'} status      解碼狀態
    * @property {string} error
@@ -1443,6 +1460,20 @@
     return { l, r: w - 1 - r, t, b: h - 1 - b };
   }
 
+  /**
+   * 完整顯示用的內容矩形：四邊各自去掉純色留白，不要求成對、不設門檻。
+   * cover 那套是「保守、寧可不裁」，因為裁錯會切掉商品；完整顯示不裁商品，
+   * 去掉的只是會被白底取代的留白，所以可以放手做——目的是讓主體真的
+   * 上下左右置中，而不是連同不對稱的留白一起置中。
+   */
+  function wholeRect(bmp, scan, m) {
+    const back = (v, k) => Math.max(0, Math.round((v - SCAN_SLACK) / k));
+    const x = back(m.l, scan.kx), y = back(m.t, scan.ky);
+    const w = bmp.width - x - back(m.r, scan.kx);
+    const h = bmp.height - y - back(m.b, scan.ky);
+    return w > 0 && h > 0 ? { x, y, w, h } : null;
+  }
+
   function contentRect(bmp) {
     const none = { x: 0, y: 0, w: bmp.width, h: bmp.height, trim: null };
 
@@ -1457,6 +1488,7 @@
     if (!bg) return none;
     const m = scanMargins(scan, bg);
     if (!m) return none;
+    none.fit = wholeRect(bmp, scan, m);
 
     const bigL = m.l / scan.w >= MARGIN_MIN;
     const bigR = m.r / scan.w >= MARGIN_MIN;
@@ -1473,41 +1505,67 @@
       const b = back(m.r, scan.kx);
       const w = bmp.width - a - b;
       if (w <= 0 || (!a && !b)) return none;
-      return { x: a, y: 0, w, h: bmp.height, trim: { axis: 'x', a, b } };
+      return { x: a, y: 0, w, h: bmp.height, trim: { axis: 'x', a, b }, fit: none.fit };
     }
     const a = back(m.t, scan.ky);
     const b = back(m.b, scan.ky);
     const h = bmp.height - a - b;
     if (h <= 0 || (!a && !b)) return none;
-    return { x: 0, y: a, w: bmp.width, h, trim: { axis: 'y', a, b } };
+    return { x: 0, y: a, w: bmp.width, h, trim: { axis: 'y', a, b }, fit: none.fit };
   }
 
   // ==========================================================================
   // 裁切矩形（與 index.html 同一套計算）
   // ==========================================================================
 
-  function fitScale(rect) {
-    return Math.max(SIZE / rect.w, SIZE / rect.h);
+  // fit＝完整顯示：改用 contain（取短邊比例），整張照片放進 1000×1000，
+  // 空出來的兩側（直圖）或上下（橫圖）留白底。fit 為假時與 index.html 同一套
+  // cover 計算，逐位元不變量只靠這條分支守住。
+  function fitScale(rect, fit) {
+    return fit ? Math.min(SIZE / rect.w, SIZE / rect.h)
+               : Math.max(SIZE / rect.w, SIZE / rect.h);
   }
 
-  function panRange(rect, z) {
-    const f = fitScale(rect) * z;
+  function panRange(rect, z, fit) {
+    const f = fitScale(rect, fit) * z;
     return {
       x: Math.max(0, (rect.w * f - SIZE) / 2),
       y: Math.max(0, (rect.h * f - SIZE) / 2),
     };
   }
 
-  function srcRect(rect, adj) {
-    const f = fitScale(rect) * adj.z;
+  function srcRect(rect, adj, fit) {
+    const f = fitScale(rect, fit) * adj.z;
     const s = SIZE / f;
-    const r = panRange(rect, adj.z);
+    const r = panRange(rect, adj.z, fit);
     const dx = Math.min(r.x, Math.max(-r.x, adj.dx));
     const dy = Math.min(r.y, Math.max(-r.y, adj.dy));
     return {
       sx: rect.x + (rect.w - s) / 2 - dx / f,
       sy: rect.y + (rect.h - s) / 2 - dy / f,
       sw: s, sh: s, f, dx, dy,
+    };
+  }
+
+  /**
+   * 取景框 r 與內容矩形的交集，連同它在輸出上的位置。完整顯示時取景框比
+   * 內容大，超出的部分不能讓 drawImage 自己去夾——去白邊照片的留白
+   * 不是純白，會變成一圈灰邊，所以只畫內容、其餘交給白底。
+   */
+  /** 這張實際拿來算構圖的內容矩形：完整顯示用四邊去白的那一個 */
+  function rectOf(content, fit) {
+    return fit && content.fit ? content.fit : content;
+  }
+
+  function visiblePart(rect, r) {
+    const x0 = Math.max(r.sx, rect.x), y0 = Math.max(r.sy, rect.y);
+    const x1 = Math.min(r.sx + r.sw, rect.x + rect.w);
+    const y1 = Math.min(r.sy + r.sh, rect.y + rect.h);
+    if (x1 <= x0 || y1 <= y0) return null;
+    return {
+      sx: x0, sy: y0, sw: x1 - x0, sh: y1 - y0,
+      dx: (x0 - r.sx) * r.f, dy: (y0 - r.sy) * r.f,
+      dw: (x1 - x0) * r.f, dh: (y1 - y0) * r.f,
     };
   }
 
@@ -1845,8 +1903,12 @@
     if (!boxes.length || !item.measure) return 0;
     let x0 = 0, y0 = 0, rw = item.measure.w, rh = item.measure.h;
     if (item.frameOn) {
-      const r = srcRect(item.measure.content, item.adjust);
-      x0 = r.sx; y0 = r.sy; rw = r.sw; rh = r.sh;
+      const rc = rectOf(item.measure.content, item.fitOn);
+      const r = srcRect(rc, item.adjust, item.fitOn);
+      // 完整顯示時取景框含白邊，分母只算照片真的出現的那塊
+      const v = item.fitOn ? visiblePart(rc, r) : r;
+      if (!v) return 0;
+      x0 = v.sx; y0 = v.sy; rw = v.sw; rh = v.sh;
     }
     const N = 160;
     const gw = rw / N, gh = rh / N;
@@ -1889,9 +1951,14 @@
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, SIZE, SIZE);
 
-        const content = item.measure ? item.measure.content : contentRect(bmp);
-        const r = srcRect(content, item.adjust);
-        ctx.drawImage(bmp, r.sx, r.sy, r.sw, r.sh, 0, 0, SIZE, SIZE);
+        const content = rectOf(item.measure ? item.measure.content : contentRect(bmp), item.fitOn);
+        const r = srcRect(content, item.adjust, item.fitOn);
+        if (item.fitOn) {
+          const v = visiblePart(content, r);
+          if (v) ctx.drawImage(bmp, v.sx, v.sy, v.sw, v.sh, v.dx, v.dy, v.dw, v.dh);
+        } else {
+          ctx.drawImage(bmp, r.sx, r.sy, r.sw, r.sh, 0, 0, SIZE, SIZE);
+        }
 
         if (item.censorOn) {
           ctx.fillStyle = '#000';
@@ -2010,7 +2077,7 @@
     const m = effMode(item);
     const canZoom = item && m === 'frame';
     const z = item ? item.adjust.z : 1;
-    const range = canZoom ? panRange(item.measure.content, z) : { x: 0, y: 0 };
+    const range = canZoom ? panRange(rectOf(item.measure.content, item.fitOn), z, item.fitOn) : { x: 0, y: 0 };
     zoombar.classList.toggle('show', !!canZoom);
     zlevel.textContent = Math.round(z * 100) + '%';
     zlevel.disabled = !canZoom || !item.moved;
@@ -2032,7 +2099,7 @@
     const iw = item.measure.w, ih = item.measure.h;
 
     if (m === 'frame') {
-      const r = srcRect(item.measure.content, item.adjust);
+      const r = srcRect(rectOf(item.measure.content, item.fitOn), item.adjust, item.fitOn);
       item.adjust.dx = r.dx;
       item.adjust.dy = r.dy;
       const pct = v => (v / SIZE * 100) + '%';
@@ -2043,26 +2110,38 @@
       stage.style.aspectRatio = '1';
       Object.assign(pphoto.style, geo);
       Object.assign(pboxes.style, geo);
+      pphoto.style.clipPath = item.fitOn ? contentClip(item) : '';
       cropline.style.display = 'none';
     } else {
       const geo = { left: '0%', top: '0%', width: '100%', height: '100%' };
       stage.style.aspectRatio = iw + ' / ' + ih;
       Object.assign(pphoto.style, geo);
+      pphoto.style.clipPath = '';
       Object.assign(pboxes.style, geo);
 
       // 編輯遮罩時標出會被裁掉的範圍——那裡的部位仍然要遮，構圖隨時可能拉遠
       if (m === 'censor' && item.frameOn) {
-        const r = srcRect(item.measure.content, item.adjust);
+        const r = srcRect(rectOf(item.measure.content, item.fitOn), item.adjust, item.fitOn);
+        // 完整顯示時取景框比照片大，夾回照片範圍，虛線才不會畫到畫面外
+        const x0 = Math.max(0, r.sx), y0 = Math.max(0, r.sy);
+        const x1 = Math.min(iw, r.sx + r.sw), y1 = Math.min(ih, r.sy + r.sh);
         cropline.style.display = '';
-        cropline.style.left   = (r.sx / iw * 100) + '%';
-        cropline.style.top    = (r.sy / ih * 100) + '%';
-        cropline.style.width  = (r.sw / iw * 100) + '%';
-        cropline.style.height = (r.sh / ih * 100) + '%';
+        cropline.style.left   = (x0 / iw * 100) + '%';
+        cropline.style.top    = (y0 / ih * 100) + '%';
+        cropline.style.width  = ((x1 - x0) / iw * 100) + '%';
+        cropline.style.height = ((y1 - y0) / ih * 100) + '%';
       } else {
         cropline.style.display = 'none';
       }
     }
     repaintBoxes(item);
+  }
+
+  /** 預覽照片只露出內容矩形（去白邊後的範圍），與 compose 的 visiblePart 一致 */
+  function contentClip(item) {
+    const c = rectOf(item.measure.content, true), iw = item.measure.w, ih = item.measure.h;
+    const pc = v => (v * 100) + '%';
+    return `inset(${pc(c.y / ih)} ${pc((iw - c.x - c.w) / iw)} ${pc((ih - c.y - c.h) / ih)} ${pc(c.x / iw)})`;
   }
 
   function repaintBoxes(item) {
@@ -2373,6 +2452,9 @@
   }
 
   stage.addEventListener('pointerdown', ev => {
+    // 縮放按鈕在舞台裡面。不擋的話 setPointerCapture 會把 click 改投給舞台，
+    // 照片沒有可平移餘裕時（完整顯示的 100% 必然如此）按鈕就按不動
+    if (ev.target.closest('#zoombar')) return;
     const it = current();
     if (!it) return;
     const m = effMode(it);
@@ -2633,6 +2715,13 @@
     item.frameChip.classList.toggle('on', item.frameOn);
     item.censorChip.classList.toggle('on', item.censorOn);
     item.frameChip.setAttribute('aria-pressed', String(item.frameOn));
+    item.fitChip.classList.toggle('on', item.fitOn);
+    item.fitChip.setAttribute('aria-pressed', String(item.fitOn));
+    // 沒套框就沒有裁切可言，完整顯示不起作用——照樣能切（先設好再開套框），只是淡掉
+    item.fitChip.classList.toggle('idle', !item.frameOn);
+    item.fitChip.title = item.frameOn
+      ? (item.fitOn ? '完整顯示：整張放進框內、空白處留白' : '裁切填滿：照片鋪滿外框')
+      : '套框關閉時不起作用';
     item.censorChip.setAttribute('aria-pressed', String(item.censorOn));
   }
 
@@ -2702,12 +2791,17 @@
       fc.type = 'button';
       fc.className = 'chip frame';
       fc.textContent = '套框';
+      const xc = document.createElement('button');
+      xc.type = 'button';
+      xc.className = 'chip fit';
+      xc.textContent = '完整';
       const cc = document.createElement('button');
       cc.type = 'button';
       cc.className = 'chip censor';
       cc.textContent = '遮罩';
-      chips.append(fc, cc);
+      chips.append(fc, cc, xc);
       item.frameChip = fc;
+      item.fitChip = xc;
       item.censorChip = cc;
 
       li.append(lead, img, meta, chips);
@@ -2716,6 +2810,7 @@
       // 點晶片只切開關，不能順便換預覽——那會讓「掃過整欄調開關」變得很煩
       pick.addEventListener('click', ev => { ev.stopPropagation(); togglePick(item); });
       fc.addEventListener('click', ev => { ev.stopPropagation(); toggleFrame(item); });
+      xc.addEventListener('click', ev => { ev.stopPropagation(); toggleFit(item); });
       cc.addEventListener('click', ev => { ev.stopPropagation(); toggleCensor(item); });
       grip.addEventListener('click', ev => ev.stopPropagation());
       grip.addEventListener('pointerdown', ev => startSort(ev, li));
@@ -2916,6 +3011,27 @@
     updateGo();
   }
 
+  // 完整顯示改的是裁切範圍，副檔名與命名不受影響，但遮罩佔比要重算
+  /**
+   * 兩種模式的縮放基準與內容矩形都不同，舊的拖曳位移搬過去會讓照片偏掉。
+   * 切換時一律回到置中、100%——完整顯示的承諾就是上下左右置中
+   */
+  function recenter(item) {
+    item.adjust = { z: 1, dx: 0, dy: 0 };
+    item.moved = false;
+  }
+
+  function toggleFit(item) {
+    clearUndo();
+    item.fitOn = !item.fitOn;
+    recenter(item);
+    if (item.frameOn) item.cache = null;
+    if (item.frameOn && item.censorOn && item.detect === 'done') item.areaPct = maskedRatio(item);
+    renumber();
+    if (items[selected] === item) syncPreview();
+    updateGo();
+  }
+
   function toggleCensor(item) {
     clearUndo();
     item.censorOn = !item.censorOn;
@@ -2953,8 +3069,12 @@
     const snapshot = undoable ? changed.slice() : null;
 
     // 勾選不改變合成結果，所以那一列不必作廢快取
-    for (const it of changed) { it[key] = on; if (key !== 'pickOn') it.cache = null; }
-    if (key === 'frameOn') {
+    for (const it of changed) {
+      it[key] = on;
+      if (key !== 'pickOn') it.cache = null;
+      if (key === 'fitOn') recenter(it);
+    }
+    if (key === 'frameOn' || key === 'fitOn') {
       // 裁切範圍變了，遮罩佔可見區域的比例要跟著重算
       for (const it of changed) {
         if (it.censorOn && it.detect === 'done') it.areaPct = maskedRatio(it);
@@ -3108,6 +3228,7 @@
         thumbUrl: URL.createObjectURL(file),
         pickOn: true,
         frameOn: true,
+        fitOn: false,
         censorOn: false,
         status: 'pending',
         error: '',
@@ -3122,7 +3243,7 @@
         dup: seen.has(key),
         mode: 'censor',
         cache: null,
-        li: null, dimEl: null, tagsEl: null, pickEl: null, frameChip: null, censorChip: null,
+        li: null, dimEl: null, tagsEl: null, pickEl: null, frameChip: null, fitChip: null, censorChip: null,
       };
       seen.add(key);
       items.push(item);
