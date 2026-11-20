@@ -23,6 +23,7 @@ node tools/verify/preview-adjust.mjs   # index.html 的手動構圖調整；基�
 node tools/verify/amiami.mjs           # JAN 匯入的解析純函式與備援流程，離線、只用 fixtures/
 node tools/verify/studio-import.mjs    # JAN 匯入的畫面，攔截 jina/weserv，不需 test/
 node tools/verify/spec-ja.mjs          # 備援站英文規格的日文對照表，node:vm、不需瀏覽器
+node tools/verify/fit.mjs              # studio 的「完整顯示」（contain 留白），現畫測試圖、不需 test/
 ```
 
 - 驗證腳本會自己起靜態 server（各自固定 port），不需要先跑 `serve.cmd`。
@@ -60,7 +61,7 @@ node tools/verify/spec-ja.mjs          # 備援站英文規格的日文對照表
 
 ### 套框管線
 
-`createImageBitmap(file, { imageOrientation: 'from-image' })` → 偵測並去除單軸純色留白邊（保守判定，寧可不裁）→ 1000×1000 canvas：白底 → 內容 cover 置中裁切（可手動拖曳/縮放覆寫）→ 疊外框 → JPEG。多張打包成手寫 store-only ZIP 單次下載（Safari 會靜默丟棄連續程式化下載）。
+`createImageBitmap(file, { imageOrientation: 'from-image' })` → 偵測並去除單軸純色留白邊（保守判定，寧可不裁）→ 1000×1000 canvas：白底 → 內容 cover 置中裁切（可手動拖曳/縮放覆寫；studio 可逐張改為「完整顯示」＝contain 留白，`item.fitOn`，關閉時必須走原本的 cover 分支以守住不變量）→ 疊外框 → JPEG。多張打包成手寫 store-only ZIP 單次下載（Safari 會靜默丟棄連續程式化下載）。
 
 ### 遮罩
 
