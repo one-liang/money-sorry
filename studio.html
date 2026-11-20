@@ -696,8 +696,6 @@
   .chip.on { color: var(--brown); background: var(--amber2); border-color: var(--amber); }
   .chip.censor.on { color: #fff; background: #4a4a4a; border-color: #2e2e2e; }
   .chip.fit.on { color: #fff; background: var(--brown2); border-color: var(--brown); }
-  /* 套框關著時完整顯示沒有作用：仍可切換，只是退到背景 */
-  .chip.fit.idle { opacity: .45; }
 
   /* ---- preview ---- */
   #modes {
@@ -774,6 +772,8 @@
   /* 編輯遮罩時外框淡出——它擋住的正是要確認的區域 */
   #stage.censoring #pframe { opacity: .12; }
   #stage.noframe #pframe { display: none; }
+  /* 沒套框的完整顯示輸出是透明 PNG：拿掉白底，讓舞台的棋盤格透出來 */
+  #stage.clear #pview { background: transparent; }
 
   /* 編輯遮罩時標出哪些區域會被套框裁掉 */
   #cropline {
@@ -1132,8 +1132,8 @@
             </span>
           </div>
 
-          <!-- 完整顯示只在套框開著時有作用：整張照片縮進框內，
-               直圖左右、橫圖上下留白，不裁切 -->
+          <!-- 完整顯示：整張照片不裁切、補成正方形，直圖左右、橫圖上下空出來。
+               有套框時空白是白底，沒套框時是透明（輸出 PNG） -->
           <div class="brow">
             <button type="button" class="tg" id="bulk-fit" role="checkbox"
                     aria-checked="false" aria-labelledby="lbl-fit" disabled><i></i></button>
@@ -1552,6 +1552,24 @@
    * 內容大，超出的部分不能讓 drawImage 自己去夾——去白邊照片的留白
    * 不是純白，會變成一圈灰邊，所以只畫內容、其餘交給白底。
    */
+  /**
+   * 構圖可以縮到多小：「整張內容剛好放進 1000×1000」（＝contain）的一半。
+   * 只縮到 contain 不夠——外框四周的邊條與兩角標誌會壓住照片邊緣，
+   * 要再縮一點才躲得開。縮到 100% 以下時平移餘裕為 0，照片永遠置中。
+   *   完整顯示  100% 就是 contain → 下限 50%
+   *   裁切填滿  100% 是 cover   → 下限 (短邊/長邊) × 50%
+   */
+  const FIT_SHRINK = 0.5;
+  function minZoom(item) {
+    if (!item || !item.measure) return ZOOM_MIN;
+    if (item.fitOn) return FIT_SHRINK;
+    const c = item.measure.content;
+    return Math.min(c.w, c.h) / Math.max(c.w, c.h) * FIT_SHRINK;
+  }
+
+  /** 取景框會不會超出內容：完整顯示，或裁切模式被縮到 100% 以下 */
+  const loose = item => item.fitOn || item.adjust.z < 1 - 1e-6;
+
   /** 這張實際拿來算構圖的內容矩形：完整顯示用四邊去白的那一個 */
   function rectOf(content, fit) {
     return fit && content.fit ? content.fit : content;
@@ -1953,7 +1971,9 @@
 
         const content = rectOf(item.measure ? item.measure.content : contentRect(bmp), item.fitOn);
         const r = srcRect(content, item.adjust, item.fitOn);
-        if (item.fitOn) {
+        // 取景框可能比內容大（完整顯示，或把構圖縮到 100% 以下）時只畫交集。
+        // 100% 的裁切填滿仍走原本那一行，index.html 的逐位元不變量靠它守住
+        if (loose(item)) {
           const v = visiblePart(content, r);
           if (v) ctx.drawImage(bmp, v.sx, v.sy, v.sw, v.sh, v.dx, v.dy, v.dw, v.dh);
         } else {
@@ -1967,6 +1987,24 @@
           }
         }
         ctx.drawImage(frame, 0, 0, SIZE, SIZE);
+      } else if (item.fitOn) {
+        // 沒套框的完整顯示：邊長取內容的長邊（不縮放、不掉解析度），
+        // 主體置中，直圖左右、橫圖上下透明，輸出 PNG
+        const content = rectOf(item.measure ? item.measure.content : contentRect(bmp), true);
+        const side = Math.max(content.w, content.h);
+        const ox = (side - content.w) / 2 - content.x;
+        const oy = (side - content.h) / 2 - content.y;
+        outCanvas.width = outCanvas.height = side;
+        ctx.clearRect(0, 0, side, side);
+        ctx.drawImage(bmp, content.x, content.y, content.w, content.h,
+                      ox + content.x, oy + content.y, content.w, content.h);
+        if (item.censorOn) {
+          ctx.fillStyle = '#000';
+          for (const b of item.boxes) ctx.fillRect(b.x + ox, b.y + oy, b.w, b.h);
+        }
+        const png = await new Promise(res => outCanvas.toBlob(res, 'image/png'));
+        if (!png) throw new Error('toBlob 失敗');
+        return png;
       } else {
         // 只遮罩：維持原尺寸，與 censor.html 逐位元相同
         outCanvas.width = bmp.width;
@@ -1998,7 +2036,9 @@
   const stemOf = n => { const d = n.lastIndexOf('.'); return d < 0 ? n : n.slice(0, d); };
 
   /** 這張會不會被重新編碼；兩個開關都關就是原檔轉存 */
-  const processed = it => it.frameOn || it.censorOn;
+  const processed = it => it.frameOn || it.censorOn || it.fitOn;
+  /** 沒套框的完整顯示要留透明，只能是 PNG */
+  const pngOut = it => !it.frameOn && it.fitOn;
 
   /**
    * 兩層述詞，用途不同，混用就會出現互相矛盾的數字：
@@ -2025,7 +2065,7 @@
     const folder = base || ('money-sorry-' + MS.stamp());
     const used = new Set();
     const entries = ready.map((it, i) => {
-      const ext = processed(it) ? '.jpg' : (extOf(it.file.name) || '.jpg');
+      const ext = processed(it) ? (pngOut(it) ? '.png' : '.jpg') : (extOf(it.file.name) || '.jpg');
       const raw = base
         ? base + '-' + String(i + 1).padStart(pad, '0') + ext
         : stemOf(it.file.name) + (processed(it) ? SUFFIX : '') + ext;
@@ -2081,7 +2121,7 @@
     zoombar.classList.toggle('show', !!canZoom);
     zlevel.textContent = Math.round(z * 100) + '%';
     zlevel.disabled = !canZoom || !item.moved;
-    zout.disabled = !canZoom || z <= ZOOM_MIN + 1e-3;
+    zout.disabled = !canZoom || z <= minZoom(item) + 1e-3;
     zin.disabled  = !canZoom || z >= ZOOM_MAX - 1e-3;
     // 抓手看模式，touch-action 看餘裕。正方形照片在 100% 時兩軸的餘裕都是 0，
     // 綁在一起會讓一個明明拖得動（一縮放就有餘裕）的模式顯示成預設箭頭
@@ -2110,7 +2150,21 @@
       stage.style.aspectRatio = '1';
       Object.assign(pphoto.style, geo);
       Object.assign(pboxes.style, geo);
-      pphoto.style.clipPath = item.fitOn ? contentClip(item) : '';
+      pphoto.style.clipPath = loose(item) ? contentClip(item, rectOf(item.measure.content, item.fitOn)) : '';
+      cropline.style.display = 'none';
+    } else if (m === 'plain' && item.fitOn) {
+      // 沒套框的完整顯示：正方形、主體置中，空白處透出棋盤格＝輸出的透明
+      const c = rectOf(item.measure.content, true);
+      const side = Math.max(c.w, c.h);
+      const pct = v => (v / side * 100) + '%';
+      const geo = {
+        left: pct((side - c.w) / 2 - c.x), top: pct((side - c.h) / 2 - c.y),
+        width: pct(iw), height: pct(ih),
+      };
+      stage.style.aspectRatio = '1';
+      Object.assign(pphoto.style, geo);
+      Object.assign(pboxes.style, geo);
+      pphoto.style.clipPath = contentClip(item, c);
       cropline.style.display = 'none';
     } else {
       const geo = { left: '0%', top: '0%', width: '100%', height: '100%' };
@@ -2138,8 +2192,8 @@
   }
 
   /** 預覽照片只露出內容矩形（去白邊後的範圍），與 compose 的 visiblePart 一致 */
-  function contentClip(item) {
-    const c = rectOf(item.measure.content, true), iw = item.measure.w, ih = item.measure.h;
+  function contentClip(item, c) {
+    const iw = item.measure.w, ih = item.measure.h;
     const pc = v => (v * 100) + '%';
     return `inset(${pc(c.y / ih)} ${pc((iw - c.x - c.w) / iw)} ${pc((ih - c.y - c.h) / ih)} ${pc(c.x / iw)})`;
   }
@@ -2215,6 +2269,7 @@
     stage.classList.toggle('censoring', m === 'censor');
     stage.classList.toggle('noframe', m !== 'frame');
     stage.classList.toggle('willcrop', m === 'censor' && !!item && item.frameOn);
+    stage.classList.toggle('clear', m === 'plain' && !!item && item.fitOn);
 
     syncControls(current());
     if (current()) layout(current());
@@ -2292,7 +2347,7 @@
     if (!picked) { detail.textContent = ''; setAlert(''); return; }
     if (!item.censorOn) {
       detail.textContent = '';
-      setAlert(item.frameOn ? '' : '兩個開關都關：這張會原圖原樣轉存');
+      setAlert(processed(item) ? '' : '開關都關：這張會原圖原樣轉存');
       return;
     }
     if (item.detect === 'busy') { detail.textContent = '偵測中…'; setAlert(''); return; }
@@ -2328,7 +2383,7 @@
   let pinch = null;
   const pointers = new Map();
 
-  const clampZoom = v => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+  const clampZoom = (v, item) => Math.min(ZOOM_MAX, Math.max(minZoom(item), v));
 
   function toOutput(cx, cy) {
     const r = stage.getBoundingClientRect();
@@ -2356,7 +2411,7 @@
 
   function zoomTo(item, next, ax, ay) {
     const adj = item.adjust;
-    const z = clampZoom(next);
+    const z = clampZoom(next, item);
     if (z === adj.z) return;
     adj.dx = ax - (ax - adj.dx) * (z / adj.z);
     adj.dy = ay - (ay - adj.dy) * (z / adj.z);
@@ -2549,7 +2604,7 @@
       const mid = toOutput((a.x + b.x) / 2, (a.y + b.y) / 2);
       const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
       // 縮放與位移一起算：兩指中點原本壓著的那個點，縮放後仍壓在中點下
-      it.adjust.z  = clampZoom(pinch.z * d / pinch.dist);
+      it.adjust.z  = clampZoom(pinch.z * d / pinch.dist, it);
       it.adjust.dx = mid.x - pinch.ux * it.adjust.z;
       it.adjust.dy = mid.y - pinch.uy * it.adjust.z;
       changed(it);
@@ -2717,11 +2772,9 @@
     item.frameChip.setAttribute('aria-pressed', String(item.frameOn));
     item.fitChip.classList.toggle('on', item.fitOn);
     item.fitChip.setAttribute('aria-pressed', String(item.fitOn));
-    // 沒套框就沒有裁切可言，完整顯示不起作用——照樣能切（先設好再開套框），只是淡掉
-    item.fitChip.classList.toggle('idle', !item.frameOn);
-    item.fitChip.title = item.frameOn
-      ? (item.fitOn ? '完整顯示：整張放進框內、空白處留白' : '裁切填滿：照片鋪滿外框')
-      : '套框關閉時不起作用';
+    item.fitChip.title = !item.fitOn ? '裁切填滿：照片鋪滿外框（沒套框則維持原比例）'
+      : item.frameOn ? '完整顯示：整張放進框內、空白處留白'
+      : '完整顯示：補成正方形、空白處透明（PNG）';
     item.censorChip.setAttribute('aria-pressed', String(item.censorOn));
   }
 
@@ -3025,7 +3078,7 @@
     clearUndo();
     item.fitOn = !item.fitOn;
     recenter(item);
-    if (item.frameOn) item.cache = null;
+    item.cache = null;
     if (item.frameOn && item.censorOn && item.detect === 'done') item.areaPct = maskedRatio(item);
     renumber();
     if (items[selected] === item) syncPreview();
