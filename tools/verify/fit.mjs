@@ -216,11 +216,68 @@ const run = async () => {
     sha(byName(backOut, 'fit-wide')) === sha(byName(coverOut, 'fit-wide')));
 
   // ------------------------------------------------------------------
-  console.log('\n[5] 套框關閉時');
-  await chip(page, 0, 'frame').click();
+  console.log('\n[5] 沒套框時：補成正方形、透明 PNG');
+  await chip(page, 0, 'frame').click();       // 直圖套框關
+  await chip(page, 0, 'fit').click();         // 完整顯示開
+  await page.waitForTimeout(200);
+  const row0 = await page.locator('#list li').nth(0).innerText();
+  check('檔名改成 .png', row0.includes('fit-tall-money-sorry.png'), row0.replace(/\n/g, ' · '));
+  check('不再標示原圖原樣', !row0.includes('原圖原樣'));
+  await page.locator('#list li').nth(0).click();
+  await page.waitForTimeout(300);
+  const sbox = await page.locator('#stage').boundingBox();
+  check('預覽是正方形', Math.abs(sbox.width - sbox.height) < 2, `${sbox.width}×${sbox.height}`);
+  check('預覽透出棋盤格', await page.locator('#stage').evaluate(e => e.classList.contains('clear')));
+  const P = (await grab(page)).find(e => e.name.includes('fit-tall'));
+  fs.writeFileSync(path.join(OUT_DIR, 'fit-tall-noframe.png'), P.bytes);
+  check('輸出是 PNG', P.name.endsWith('.png') && P.bytes.slice(1, 4).toString() === 'PNG', P.name);
+  const info = await page.evaluate(async src => {
+    const img = new Image(); img.src = src; await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0);
+    const px = (a, b) => [...x.getImageData(a, b, 1, 1).data];
+    return { w: c.width, h: c.height, left: px(100, 600), right: px(1100, 600), mid: px(600, 600), top: px(600, 20) };
+  }, `data:image/png;base64,${P.bytes.toString('base64')}`);
+  check('邊長＝長邊 1200、正方形', info.w === 1200 && info.h === 1200, `${info.w}×${info.h}`);
+  check('左側透明', info.left[3] === 0, info.left.join(','));
+  check('右側透明', info.right[3] === 0, info.right.join(','));
+  check('中間是不透明的照片', info.mid[3] === 255 && near(info.mid.slice(0, 3), RED, 4), info.mid.join(','));
+  check('頂端藍邊完整（沒有裁切）', near(info.top.slice(0, 3), BLUE, 4), info.top.join(','));
+  await chip(page, 0, 'fit').click();         // 完整顯示關回去，套框維持關（[6] 會開回來）
   await page.waitForTimeout(150);
-  check('完整晶片淡出（不起作用）',
-    await chip(page, 0, 'fit').evaluate(e => e.classList.contains('idle')));
+
+  // ------------------------------------------------------------------
+  console.log('\n[5b] 套框時構圖可以縮小到不裁切、也躲得開外框');
+  await page.locator('#list li').nth(1).click();   // 橫圖：套框開、完整顯示關
+  await page.waitForSelector('#stage.has:not(.busy)');
+  await page.waitForSelector('#zoombar.show');
+  const zoomOutAll = async () => {
+    for (let i = 0; i < 20 && !await page.locator('#zout').isDisabled(); i++) await page.click('#zout');
+    return page.locator('#zlevel').innerText();
+  };
+  // 1200×600：cover 100% → contain 是 50%，下限再減半＝25%，照片 500×250 置中
+  const zl = await zoomOutAll();
+  check('裁切模式縮小下限＝contain 的一半（25%）', zl === '25%', zl);
+  const Z = (await grab(page)).find(e => e.name.includes('fit-wide')).bytes;
+  fs.writeFileSync(path.join(OUT_DIR, 'fit-wide-zoomout.jpg'), Z);
+  const [zOut, zTop, zL, zR, zMid] = await pixels(page, Z, [[150, 500], [500, 300], [265, 500], [735, 500], [500, 500]]);
+  check('照片外是白底（左）', near(zOut, WHITE), zOut.join(','));
+  check('照片外是白底（上）', near(zTop, WHITE), zTop.join(','));
+  check('左端藍邊完整出現', near(zL, BLUE), zL.join(','));
+  check('右端藍邊完整出現', near(zR, BLUE), zR.join(','));
+  check('照片置中', near(zMid, RED), zMid.join(','));
+  check('標示為已手動調整', (await page.locator('#list li').nth(1).innerText()).includes('已手動調整'));
+
+  // 完整顯示的 100% 就是 contain，也要能再縮一半
+  await chip(page, 1, 'fit').click();
+  await page.waitForTimeout(200);
+  check('切到完整顯示回到 100%', await page.locator('#zlevel').innerText() === '100%');
+  const zf = await zoomOutAll();
+  check('完整顯示縮小下限 50%', zf === '50%', zf);
+  await chip(page, 1, 'fit').click();         // 關回去（同時回到置中 100%）
+  await page.waitForTimeout(150);
 
   // ------------------------------------------------------------------
   console.log('\n[6] 主體上下左右置中');
